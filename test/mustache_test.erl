@@ -29,6 +29,17 @@ render_all_variables_test() ->
     ?assertEqual("toto tata  toto",
                  mustache:render(Template, [{var1, "toto"}, {var2, "tata"}])).
 
+render_missing_end_delimiter_test() ->
+    Template = "Hello {{name",
+    ?assertEqual("Hello {{name", mustache:render(Template, [{name, "Tom"}])).
+
+render_broken_tag_test() ->
+    Template = "I am become {{name}, the {{job}}",
+    Params = [{name, "Death"},
+              {job, "destroyer of worlds"}],
+    ?assertEqual("I am become {{name}, the destroyer of worlds",
+                 mustache:render(Template, Params)).
+
 render_type_test() ->
     Template = "{{atom}}, {{int}}, {{float}}, {{string}}, {{binary}}, {{bool}}",
     Params = [{atom, atom}, {int, 10}, {float, 10.01},
@@ -47,6 +58,17 @@ render_escape_html_test() ->
                  mustache:render(Template, [{injection, "<script>"}])),
     ?assertEqual("&lt;b&gt;test&lt;/b&gt;",
                  mustache:render(Template, [{injection, "<b>test</b>"}])).
+
+render_missing_end_delimiter_escape_test() ->
+    Template = "Hello {{{name",
+    ?assertEqual("Hello {{{name", mustache:render(Template, [{name, "Tom"}])).
+
+render_broken_escape_tag_test() ->
+    Template = "I am become {{{name}}, the {{{job}}}",
+    Params = [{name, "Death"},
+              {job, "destroyer of worlds"}],
+    ?assertEqual("I am become {{{name}}, the destroyer of worlds",
+                 mustache:render(Template, Params)).
 
 render_does_not_escape_html_test() ->
     Template = "{{{html}}}",
@@ -122,6 +144,13 @@ render_section_with_lambda_test() ->
               {who, "wōrld"}],
     ?assertEqual("ラムダ: <b>hellö wōrld</b>",
                  mustache:render(Template, Params)).
+
+render_section_with_no_endtag_test() ->
+    Template = "Dwarves: {{#dwarves}}{{.}},",
+    Params = [{dwarves, ["Doc", "Happy", "Bashful", "Grumpy",
+                         "Sleepy", "Sneezy", "Dopey"]}],
+    Expected = "Dwarves: Doc,Happy,Bashful,Grumpy,Sleepy,Sneezy,Dopey,",
+    ?assertEqual(Expected, mustache:render(Template, Params)).
 
 render_ignore_comments_test() ->
     Template = "Hello {{! ignore me}}world{{!ignore}}",

@@ -14,11 +14,17 @@ render(Template, Params) ->
 
 render([], _, Acc) -> lists:flatten(?rev(Acc));
 render([${, ${, ${ | Tail], Params, Acc) ->
-    {Key, Tail2} = fetch_tag_content(Tail, "}}}"),
-    Value = to_str(val(Key, Params)),
-    render(Tail2, Params, [Value | Acc]);
+    case fetch_tag_content(Tail, "}}}") of
+        end_delimiter_error ->
+            render(Tail, Params, [${, ${, ${ | Acc]);
+        {Key, Tail2} ->
+            Value = to_str(val(Key, Params)),
+            render(Tail2, Params, [Value | Acc])
+    end;
 render([${, ${ | Tail], Params, Acc) ->
     case fetch_tag_content(Tail, "}}") of
+        end_delimiter_error ->
+            render(Tail, Params, [${, ${ | Acc]);
         {[$! | _], Tail2} ->
             render(Tail2, Params, Acc);
         {[Char | Key], Tail2} when Char =:= $#; Char =:= $^ ->
@@ -71,12 +77,14 @@ render_section(Template, Params, _) ->
 fetch_tag_content(Content, Endtag) ->
     fetch_tag_content(Content, Endtag, "").
 
-fetch_tag_content([], _, Acc) ->
-    {string:trim(?rev(Acc)), ""};
+fetch_tag_content([], _, _) ->
+    end_delimiter_error;
 fetch_tag_content([A, B, C | Tail], [A, B, C], Acc) ->
     {string:trim(?rev(Acc)), Tail};
 fetch_tag_content([A, B | Tail], [A, B], Acc) ->
     {string:trim(?rev(Acc)), Tail};
+fetch_tag_content([$} | _], _, _) ->
+    end_delimiter_error;
 fetch_tag_content([Letter | Tail], Endtag, Acc) ->
     fetch_tag_content(Tail, Endtag, [Letter | Acc]).
 
