@@ -1,10 +1,13 @@
 -module(mustache).
 
--export([render/2]).
+-export([render/1, render/2]).
 
 -define(rev(L), lists:reverse(L)).
 -define(val(K, P), proplists:get_value(K, P)).
 -define(val(K, P, D), proplists:get_value(K, P, D)).
+
+render(Template) ->
+    render(Template, []).
 
 render(Template, Params) ->
     render(Template, Params, "").

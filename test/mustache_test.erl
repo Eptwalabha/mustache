@@ -4,7 +4,7 @@
 
 
 render_test() ->
-    ?assertEqual("", mustache:render("{{mustache}}", [])).
+    ?assertEqual("", mustache:render("{{mustache}}")).
 
 render_substitute_variable_test() ->
     ?assertEqual("toto", mustache:render("{{mustache}}", [{mustache, "toto"}])).
@@ -57,7 +57,7 @@ render_does_not_escape_html_test() ->
 
 render_do_not_render_sections_test() ->
     Template = "{{#section}}won't show{{/section}}",
-    ?assertEqual("", mustache:render(Template, [])),
+    ?assertEqual("", mustache:render(Template)),
     ?assertEqual("", mustache:render(Template, [{section, false}])),
     ?assertEqual("", mustache:render(Template, [{section, []}])).
 
@@ -148,6 +148,6 @@ render_partial_section_test() ->
 
 render_partial_section_not_defined_test() ->
     Template = "{{>does-not-exists}}",
-    ?assertEqual("", mustache:render(Template, [])).
+    ?assertEqual("", mustache:render(Template)).
 
 
