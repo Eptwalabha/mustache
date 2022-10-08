@@ -55,8 +55,10 @@ render_section(Template, Params, Value) when is_list(Value) ->
     case is_string(Value) of
         true -> render(Template, Params);
         _ ->
-            Fun = fun (I) when is_list(I) -> render(Template, I ++ Params);
-                      (_) -> render(Template, Params)
+            Fun = fun ([{_, _} | _] = Item) ->
+                          render(Template, Item ++ Params);
+                      (Item) ->
+                          render(Template, [{'.', Item} | Params])
                   end,
             lists:map(Fun, Value)
     end;

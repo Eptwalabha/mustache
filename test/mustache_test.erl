@@ -74,6 +74,15 @@ render_section_with_non_empty_array_test() ->
     ?assertEqual("ping-pong-pong-pong",
                  mustache:render(Template, [{section, [a, b, c]}])).
 
+render_section_with_array_test() ->
+    Template = "users:\n{{#users}}- {{.}}\n{{/users}}",
+    Params = [{users, ["Huey", "Dewey", "Louie"]}],
+    Expected = "users:\n"
+               "- Huey\n"
+               "- Dewey\n"
+               "- Louie\n",
+    ?assertEqual(Expected, mustache:render(Template, Params)).
+
 render_section_pass_context_test() ->
     Template = "ducks:"
                "{{#ducks}}"
