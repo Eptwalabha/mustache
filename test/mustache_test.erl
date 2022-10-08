@@ -179,4 +179,6 @@ render_partial_section_not_defined_test() ->
     Template = "{{>does-not-exists}}",
     ?assertEqual("", mustache:render(Template)).
 
-
+main_only_template_test() ->
+    mustache:main(["Hello {{name}}!"]),
+    ?assertEqual("Hello !\n", ?capturedOutput).

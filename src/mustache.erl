@@ -1,10 +1,14 @@
 -module(mustache).
 
 -export([render/1, render/2]).
+-export([main/1]).
 
 -define(rev(L), lists:reverse(L)).
 -define(val(K, P), proplists:get_value(K, P)).
 -define(val(K, P, D), proplists:get_value(K, P, D)).
+
+main([Template | _]) ->
+    io:format("~ts~n", [render(Template)]).
 
 render(Template) ->
     render(Template, []).
