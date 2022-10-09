@@ -89,12 +89,30 @@ render_section_if_true_test() ->
     ?assertEqual("hello world", mustache:render(Template, Params)).
 
 render_section_with_non_empty_array_test() ->
-    Template = "ping{{#section}}-pong{{/section}}",
-    ?assertEqual("ping-pong", mustache:render(Template, [{section, "something"}])),
-    ?assertEqual("ping-pong-pong-pong",
-                 mustache:render(Template, [{section, ["one", "two", "three"]}])),
-    ?assertEqual("ping-pong-pong-pong",
-                 mustache:render(Template, [{section, [a, b, c]}])).
+    Template = "list:{{#list}} {{.}}{{/list}}",
+    ?assertEqual("list: 1 2 3",
+                 mustache:render(Template, [{list, [1, 2, 3]}])),
+    ?assertEqual("list: 1.2 3.4 5.6",
+                 mustache:render(Template, [{list, [1.2, 3.4, 5.6]}])),
+    ?assertEqual("list: 97 98 99",
+                 mustache:render(Template, [{list, "abc"}])),
+    ?assertEqual("list: one two three",
+                 mustache:render(Template, [{list, ["one", "two", "three"]}])),
+    ?assertEqual("list: a b c",
+                 mustache:render(Template, [{list, [a, b, c]}])).
+
+render_section_with_other_than_array_test() ->
+    Template = "item: {{#section}}{{.}}{{/section}}",
+    ?assertEqual("item: 123",
+                 mustache:render(Template, [{section, 123}])),
+    ?assertEqual("item: 123.456",
+                 mustache:render(Template, [{section, 123.456}])),
+    ?assertEqual("item: atom",
+                 mustache:render(Template, [{section, atom}])),
+    ?assertEqual("item: true",
+                 mustache:render(Template, [{section, true}])),
+    ?assertEqual("item: Häns",
+                 mustache:render(Template, [{section, <<"Häns"/utf8>>}])).
 
 render_section_with_array_test() ->
     Template = "users:\n{{#users}}- {{.}}\n{{/users}}",

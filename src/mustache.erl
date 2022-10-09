@@ -59,24 +59,22 @@ can_render([], false) -> false;
 can_render(false, false) -> false;
 can_render(_, _) -> true.
 
-render_section(Template, Params, Lambda) when is_function(Lambda, 2) ->
-    Render = fun (New_template) -> render(New_template, Params) end,
-    render(Lambda(Template, Render), Params);
 render_section(Template, Params, "") ->
     render(Template, Params);
-render_section(Template, Params, Value) when is_list(Value) ->
-    case is_string(Value) of
-        true -> render(Template, Params);
-        _ ->
-            Fun = fun ([{_, _} | _] = Item) ->
-                          render(Template, Item ++ Params);
-                      (Item) ->
-                          render(Template, [{'.', Item} | Params])
-                  end,
-            lists:map(Fun, Value)
-    end;
-render_section(Template, Params, _) ->
-    render(Template, Params).
+render_section(Template, Params, Lambda)
+  when is_function(Lambda, 2) ->
+    Render = fun (New_template) -> render(New_template, Params) end,
+    render(Lambda(Template, Render), Params);
+render_section(Template, Params, Value)
+  when is_list(Value) ->
+    Fun = fun ([{_, _} | _] = Item) ->
+                  render(Template, Item ++ Params);
+              (Item) ->
+                  render(Template, [{'.', Item} | Params])
+          end,
+    lists:map(Fun, Value);
+render_section(Template, Params, Value) ->
+    render(Template, [{'.', Value} | Params]).
 
 fetch_tag_content(Content, Endtag) ->
     fetch_tag_content(Content, Endtag, "").
@@ -117,6 +115,4 @@ fetch_section(Template, Endtag) ->
     Re_options = [unicode, {return, list}],
     [Section | Tail] = re:split(Template, "{{/" ++ Endtag ++ "}}", Re_options),
     {Section, Tail}.
-
-is_string(String) -> lists:all(fun(X) -> is_integer(X) end, String).
 
