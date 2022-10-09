@@ -5,7 +5,7 @@
 A library to render [Mustach](https://mustache.github.io/) templates.  
 It tries to comply with the [Mustache's manual](https://mustache.github.io/mustache.5.html) as close as possible.
 
-> :warning: This library is still a WIP, the following features have yet to be developped:
+> :warning: While all major features are present, this library is still under development. The following have yet to be added:
 > - fetch template & partials from file
 > - allow [different delimiter](https://mustache.github.io/mustache.5.html#Set-Delimiter)
 > - accept [unicode:chardata()](https://www.erlang.org/doc/man/unicode.html#type-chardata) as input
