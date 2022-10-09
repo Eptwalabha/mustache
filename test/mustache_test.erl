@@ -200,3 +200,14 @@ render_partial_section_not_defined_test() ->
 main_only_template_test() ->
     mustache:main(["Hello {{name}}!"]),
     ?assertEqual("Hello !\n", ?capturedOutput).
+
+render_multiple_sections_test() ->
+    Template = "{{#items}}- {{name}}\n{{/items}}"
+               "{{#list}}- {{.}}\n{{/list}}",
+    Params = [{items, [[{name, "item1"}],
+                       [{name, "item2"}],
+                       [{name, "item3"}]]},
+              {list, ["itemA", "itemB", "itemC"]}],
+    ?assertEqual("- item1\n- item2\n- item3\n"
+                 "- itemA\n- itemB\n- itemC\n",
+                 mustache:render(Template, Params)).

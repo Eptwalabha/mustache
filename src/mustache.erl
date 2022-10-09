@@ -4,6 +4,7 @@
 -export([main/1]).
 
 -define(rev(L), lists:reverse(L)).
+-define(flat(L), lists:flatten(L)).
 -define(val(K, P), proplists:get_value(K, P)).
 -define(val(K, P, D), proplists:get_value(K, P, D)).
 
@@ -114,5 +115,5 @@ html_escape([Char | Tail], Acc) -> html_escape(Tail, [Char | Acc]).
 fetch_section(Template, Endtag) ->
     Re_options = [unicode, {return, list}],
     [Section | Tail] = re:split(Template, "{{/" ++ Endtag ++ "}}", Re_options),
-    {Section, Tail}.
+    {Section, ?flat(Tail)}.
 
