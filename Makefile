@@ -1,16 +1,16 @@
 #!/usr/bin/make
 
-.PHONY : all deps compile cover clean
+.PHONY : all deps compile test cover clean
 all: deps compile cover
 deps:
-	@rebar3 get-deps
+	rebar3 get-deps
 compile:
-	@rebar3 compile
-	@rebar3 escriptize
+	rebar3 compile
+	rebar3 escriptize
 test:
-	-@rebar3 eunit
+	rebar3 eunit
 cover:
-	-@rebar3 eunit --cover
-	-@rebar3 cover -m 100
+	rebar3 eunit --cover
+	rebar3 cover -m 100
 clean:
-	@rebar3 clean
+	rebar3 clean
