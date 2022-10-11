@@ -13,7 +13,7 @@ It tries to comply with the [Mustache's manual](https://mustache.github.io/musta
 ## Usage
 
 ``` erlang
-> mustache:render("Hello {{wut}}!", [{wut, "world"}]).
+> mustache:render("Hello {{wut}}!", #{ wut => "world" }).
 "Hello world!"
 ```
 
@@ -22,12 +22,12 @@ It tries to comply with the [Mustache's manual](https://mustache.github.io/musta
 The section **Non-Empty Lists** of the [manual](https://mustache.github.io/mustache.5.html#Sections), states that a section should be displayed as many time as there's element in the list.  
 The problem is that erlang's strings [are lists](https://learnyousomeerlang.com/starting-out-for-real#highlighter_829076), which means that the following code will display as such:
 ``` erlang
-> mustache:render("{{#string}}oups!{{/string}}", [{string, "hello"}]).
+> mustache:render("{{#string}}oups!{{/string}}", #{ string => "hello" }).
 "oups!oups!oups!oups!oups!"
 ```
 To avoid this kind of problem, use binary instead:
 ``` erlang
-> mustache:render("{{#string}}ok{{/string}}", [{string, <<"hello">>}]).
+> mustache:render("{{#string}}ok{{/string}}", #{ string => <<"hello">> }).
 "ok"
 ```
 
@@ -37,8 +37,8 @@ To avoid this kind of problem, use binary instead:
                 New_template = "<strong>" ++ Template ++ "</strong>",
                 Render(New_template)
         end.
-> Params = [{name, "Tom"}, {lambda, Fun}].
-> mustache:render("{{#lambda}}hello {{name}}{{/lambda}}", Params).
+> Map = #{ name => "Tom", lambda => Fun }.
+> mustache:render("{{#lambda}}hello {{name}}{{/lambda}}", Map).
 "<strong>hello Tom</strong>"
 ```
 
@@ -52,13 +52,13 @@ Tags that begin with a bang (`!`) won't be displayed:
 ## Partials
 Tags that begin with `>` will include external template.
 
-### Using `Params`
+### Using `Map`
 Partial can be stored in the Parameters used to render the template like so:
 ``` erlang
-> Params = [{ducks, ["Huey", "Dewey", "Louie"]},
-            {item, "- {{.}}\n"}].
+> Map = #{ ducks => ["Huey", "Dewey", "Louie"],
+           item => "- {{.}}\n" }.
 > Template = "ducks:\n{{#ducks}}{{>item}}{{/ducks}}".
-> mustache:render(Template, Params).
+> mustache:render(Template, Map).
 "ducks:\n- Huey\n- Dewey\n- Louie\n"
 ```
 
