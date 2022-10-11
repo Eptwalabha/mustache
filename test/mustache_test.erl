@@ -64,10 +64,10 @@ render_missing_end_delimiter_escape_test() ->
     ?assertEqual("Hello {{{name", mustache:render(Template, [{name, "Tom"}])).
 
 render_broken_escape_tag_test() ->
-    Template = "I am become {{{name}}, the {{{job}}}",
-    Params = [{name, "Death"},
-              {job, "destroyer of worlds"}],
-    ?assertEqual("I am become {{{name}}, the destroyer of worlds",
+    Template = "I am become {{{name}}, the {{{function}}}",
+    Params = [{name, "Beethoven"},
+              {function, "destroyer of plants"}],
+    ?assertEqual("I am become {{{name}}, the destroyer of plants",
                  mustache:render(Template, Params)).
 
 render_does_not_escape_html_test() ->
@@ -126,14 +126,15 @@ render_section_with_array_test() ->
 render_section_pass_context_test() ->
     Template = "ducks:"
                "{{#ducks}}"
-                    " {{name}}"
+                    " {{duck_name}}"
                "{{/ducks}}",
-    Params = [{name, "Donald"},
+    Params = [{duck_name, "Donald"},
               {ducks, [[],
-                       [{name, "Huey"}],
-                       [{name, "Dewey"}],
-                       [{name, "Louie"}]]}],
-    ?assertEqual("ducks: Donald Huey Dewey Louie", mustache:render(Template, Params)).
+                       [{duck_name, "Huey"}],
+                       [{duck_name, "Dewey"}],
+                       [{duck_name, "Louie"}]]}],
+    ?assertEqual("ducks: Donald Huey Dewey Louie",
+                 mustache:render(Template, Params)).
 
 render_section_with_html_test() ->
     Template = "<ul>{{#list}}<li>{{item}}: {{{item}}}</li>{{/list}}</ul>",
@@ -143,7 +144,8 @@ render_section_with_html_test() ->
     Expected = "<ul>"
                    "<li>&lt;b&gt;item1&lt;/b&gt;: <b>item1</b></li>"
                    "<li>&lt;i&gt;item2&lt;/i&gt;: <i>item2</i></li>"
-                   "<li>&lt;strong&gt;item3&lt;/strong&gt;: <strong>item3</strong></li>"
+                   "<li>&lt;strong&gt;item3&lt;/strong&gt;: "
+                       "<strong>item3</strong></li>"
                "</ul>",
     ?assertEqual(Expected, mustache:render(Template, Params)).
 
