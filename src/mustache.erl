@@ -66,14 +66,20 @@ render_section(Template, Params, Lambda)
     render(Lambda(Template, Render), Params);
 render_section(Template, Params, Value)
   when is_list(Value) ->
-    Fun = fun ([{_, _} | _] = Item) ->
-                  render(Template, Item ++ Params);
-              (Item) ->
-                  render(Template, [{'.', Item} | Params])
+    Fun = fun (Item) ->
+                  NewParams = update_params_context(Params, Item),
+                  render(Template, NewParams)
           end,
     lists:map(Fun, Value);
 render_section(Template, Params, Value) ->
-    render(Template, [{'.', Value} | Params]).
+    NewParams = update_params_context(Params, Value),
+    render(Template, NewParams).
+
+update_params_context(Map, Map2)
+  when is_map(Map), is_map(Map2) ->
+    maps:merge(Map, Map2);
+update_params_context(Map, Item) ->
+    maps:merge(Map, #{ '.' => Item }).
 
 fetch_tag_content(Content, Endtag) ->
     fetch_tag_content(Content, Endtag, "").
@@ -89,10 +95,12 @@ fetch_tag_content([$} | _], _, _) ->
 fetch_tag_content([Letter | Tail], Endtag, Acc) ->
     fetch_tag_content(Tail, Endtag, [Letter | Acc]).
 
-val(KeyAtom, Params) when is_atom(KeyAtom) ->
-    proplists:get_value(KeyAtom, Params, "");
-val(KeyStr, Params) ->
-    val(list_to_atom(string:trim(KeyStr)), Params).
+val(Key, Map) when is_map(Map) ->
+    maps:get(atom_key(Key), Map, "");
+val(Key, Params) ->
+    proplists:get_value(atom_key(Key), Params, "").
+
+atom_key(KeyString) -> list_to_atom(string:trim(KeyString)).
 
 to_str(Int) when is_integer(Int) ->
     integer_to_list(Int);
