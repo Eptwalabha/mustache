@@ -32,9 +32,8 @@ render([${, ${ | Tail], Params, Acc) ->
             render(Tail2, Params, Acc);
         {[Char | Key], Tail2} when Char =:= $#; Char =:= $^ ->
             {Section, Tail3} = fetch_section(Tail2, Key),
-            IsInserted = Char =:= $^,
             Value = val(Key, Params),
-            Rendered = case can_render(Value, IsInserted) of
+            Rendered = case can_render(Value, is_inverted(Char)) of
                            true -> render_section(Section, Params, Value);
                            _ -> ""
                        end,
@@ -50,13 +49,14 @@ render([${, ${ | Tail], Params, Acc) ->
 render([Letter | Tail], Params, Acc) ->
     render(Tail, Params, [Letter | Acc]).
 
--spec can_render(any(), IsInserted :: boolean()) -> boolean().
-can_render([], true) -> true;
-can_render(false, true) -> true;
-can_render(_, true) -> false;
-can_render([], false) -> false;
-can_render(false, false) -> false;
-can_render(_, _) -> true.
+is_inverted($^) -> true;
+is_inverted(_) -> false.
+
+can_render(Value, IsInverted) ->
+    is_empty_or_false(Value) =:= IsInverted.
+
+is_empty_or_false(Value) ->
+    Value =:= [] orelse Value =:= false.
 
 render_section(Template, Params, "") ->
     render(Template, Params);
