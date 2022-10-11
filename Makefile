@@ -1,12 +1,14 @@
 #!/usr/bin/make
 
-.PHONY : all deps compile test cover clean
-all: deps compile cover
+.PHONY : all deps compile lint test cover clean
+all: deps compile lint cover
 deps:
 	rebar3 get-deps
 compile:
 	rebar3 compile
 	rebar3 escriptize
+lint:
+	rebar3 lint
 test:
 	rebar3 eunit
 cover:
