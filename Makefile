@@ -1,12 +1,14 @@
 #!/usr/bin/make
 
-.PHONY : all deps compile lint test cover clean
-all: deps compile lint cover
+.PHONY : all deps compile dialyzer lint test cover clean
+all: deps compile dialyzer lint cover
 deps:
 	rebar3 get-deps
 compile:
 	rebar3 compile
 	rebar3 escriptize
+dialyzer:
+	rebar3 dialyzer
 lint:
 	rebar3 lint
 test:
