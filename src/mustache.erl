@@ -116,6 +116,8 @@ to_str(String) when is_list(String) ->
 html_escape([], Acc) -> ?REV(Acc);
 html_escape([$< | Tail], Acc) -> html_escape(Tail, ["&lt;" | Acc]);
 html_escape([$> | Tail], Acc) -> html_escape(Tail, ["&gt;" | Acc]);
+html_escape([$" | Tail], Acc) -> html_escape(Tail, ["&quot;" | Acc]);
+html_escape([$& | Tail], Acc) -> html_escape(Tail, ["&amp;" | Acc]);
 html_escape([Char | Tail], Acc) -> html_escape(Tail, [Char | Acc]).
 
 fetch_section(Template, Endtag) ->
