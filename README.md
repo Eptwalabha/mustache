@@ -8,12 +8,13 @@ It tries to comply with the [Mustache's manual](https://mustache.github.io/musta
 > :warning: While all major features are present, this library is still under development. The following have yet to be added:
 > - fetch template & partials from file
 > - allow [different delimiter](https://mustache.github.io/mustache.5.html#Set-Delimiter)
-> - accept [unicode:chardata()](https://www.erlang.org/doc/man/unicode.html#type-chardata) as input
 
 ## Usage
 
 ``` erlang
 > mustache:render("Hello {{wut}}!", #{ wut => "world" }).
+"Hello world!"
+> mustache:render(<<"Hello {{wut}}!">>, [{ wut, "world" }]).
 "Hello world!"
 ```
 

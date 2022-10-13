@@ -237,3 +237,10 @@ render_allows_proplists_test() ->
     ?assertEqual("Hello John (Joe) Peter Loïs else",
                  mustache:render(Template, Proplist)).
 
+render_allows_mix_chardata_template_test() ->
+    Template = ["Hello ", <<"how">>, [[[" "]]],
+                ["{{", <<"test">>, ["}}"]],
+                <<" yöu"/utf8>>, [""], <<"?">>],
+    ?assertEqual("Hello how are yöu?",
+                 mustache:render(Template, #{ test => <<"are">> })).
+

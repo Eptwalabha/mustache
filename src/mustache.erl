@@ -13,7 +13,7 @@ render(Template) ->
     render(Template, []).
 
 render(Template, Params) ->
-    render(Template, to_map(Params), "").
+    render(unicode:characters_to_list(Template), to_map(Params), "").
 
 render([], _, Acc) -> ?FLAT(?REV(Acc));
 render([${, ${, ${ | Tail], Params, Acc) ->
