@@ -13,7 +13,7 @@ render(Template) ->
     render(Template, []).
 
 render(Template, Params) ->
-    render(Template, Params, "").
+    render(Template, to_map(Params), "").
 
 render([], _, Acc) -> ?FLAT(?REV(Acc));
 render([${, ${, ${ | Tail], Params, Acc) ->
@@ -96,10 +96,9 @@ fetch_tag_content([Letter | Tail], Endtag, Acc) ->
     fetch_tag_content(Tail, Endtag, [Letter | Acc]).
 
 val(Key, Map) when is_map(Map) ->
-    maps:get(atom_key(Key), Map, "");
-val(Key, Params) ->
-    proplists:get_value(atom_key(Key), Params, "").
+    maps:get(atom_key(Key), Map, "").
 
+atom_key(Atom) when is_atom(Atom) -> Atom;
 atom_key(KeyString) -> list_to_atom(string:trim(KeyString)).
 
 to_str(Int) when is_integer(Int) ->
@@ -124,4 +123,21 @@ fetch_section(Template, Endtag) ->
     ReOptions = [unicode, {return, list}],
     [Section | Tail] = re:split(Template, "{{/" ++ Endtag ++ "}}", ReOptions),
     {Section, ?FLAT(Tail)}.
+
+to_map(Map) when is_map(Map) -> Map;
+to_map(Proplist) ->
+    to_map(Proplist, #{}).
+
+to_map([], Map) -> Map;
+to_map([{KeyRaw, Value} | Rest], Map) ->
+    Key = atom_key(KeyRaw),
+    Map2 = case is_proplist(Value) of
+               true -> Map#{ Key => to_map(Value, #{})};
+               _ -> Map#{ Key => Value }
+           end,
+    to_map(Rest, Map2).
+
+is_proplist(List) when is_list(List) ->
+    lists:all(fun ({_, _}) -> true; (_) -> false end, List);
+is_proplist(_) -> false.
 

@@ -226,3 +226,14 @@ render_multiple_sections_test() ->
     ?assertEqual("- item1\n- item2\n- item3\n"
                  "- itemA\n- itemB\n- itemC\n",
                  mustache:render(Template, Map)).
+
+render_allows_proplists_test() ->
+    Template = "Hello {{#friend}}{{name}} ({{surname}}){{/friend}}"
+               "{{#elements}} {{.}}{{/elements}} "
+               "{{something}}",
+    Proplist = [{friend, [{name, "John"}, {surname, "Joe"}]},
+                {elements, ["Peter", "Loïs"]},
+                {something, else}],
+    ?assertEqual("Hello John (Joe) Peter Loïs else",
+                 mustache:render(Template, Proplist)).
+
