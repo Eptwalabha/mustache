@@ -56,7 +56,7 @@ can_render(Value, IsInverted) ->
     is_empty_or_false(Value) =:= IsInverted.
 
 is_empty_or_false(Value) ->
-    Value =:= [] orelse Value =:= false.
+    Value =:= [] orelse Value =:= false orelse Value =:= null.
 
 render_section(Template, Params, "") ->
     render(Template, Params);
@@ -116,6 +116,7 @@ html_escape([], Acc) -> ?REV(Acc);
 html_escape([$< | Tail], Acc) -> html_escape(Tail, ["&lt;" | Acc]);
 html_escape([$> | Tail], Acc) -> html_escape(Tail, ["&gt;" | Acc]);
 html_escape([$" | Tail], Acc) -> html_escape(Tail, ["&quot;" | Acc]);
+html_escape([$' | Tail], Acc) -> html_escape(Tail, ["&apos;" | Acc]);
 html_escape([$& | Tail], Acc) -> html_escape(Tail, ["&amp;" | Acc]);
 html_escape([Char | Tail], Acc) -> html_escape(Tail, [Char | Acc]).
 

@@ -65,8 +65,8 @@ render_escape_html_test() ->
                  mustache:render(Template, #{ injection => "<script>" })),
     ?assertEqual("&lt;b&gt;test&lt;/b&gt;",
                  mustache:render(Template, #{ injection => "<b>test</b>" })),
-    ?assertEqual("&amp;&quot;",
-                 mustache:render(Template, #{ injection => "&\"" })).
+    ?assertEqual("&amp;&quot;&apos;",
+                 mustache:render(Template, #{ injection => "&\"'" })).
 
 render_missing_end_delimiter_escape_test() ->
     Template = "Hello {{{name",
@@ -86,13 +86,14 @@ render_does_not_escape_html_test() ->
                  mustache:render(Template, #{ html => "<script>" })),
     ?assertEqual("<b>test</b>",
                  mustache:render(Template, #{ html => "<b>test</b>" })),
-    ?assertEqual("&\"",
-                 mustache:render(Template, #{ html => "&\"" })).
+    ?assertEqual("&\"'",
+                 mustache:render(Template, #{ html => "&\"'" })).
 
 render_do_not_render_sections_test() ->
     Template = "{{#section}}won't show{{/section}}",
     ?assertEqual("", mustache:render(Template)),
     ?assertEqual("", mustache:render(Template, #{ section => false })),
+    ?assertEqual("", mustache:render(Template, #{ section => null })),
     ?assertEqual("", mustache:render(Template, #{ section => [] })).
 
 render_section_if_true_test() ->
@@ -195,6 +196,7 @@ render_inverted_section_test() ->
     ?assertEqual("abcghi", mustache:render(Template, #{ var => "0123" })),
     ?assertEqual("abcghi", mustache:render(Template, #{ var => true })),
     ?assertEqual("abc def ghi", mustache:render(Template, #{var => "" })),
+    ?assertEqual("abc def ghi", mustache:render(Template, #{var => null })),
     ?assertEqual("abc def ghi", mustache:render(Template, #{var => false })).
 
 render_partial_section_test() ->
