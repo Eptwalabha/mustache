@@ -42,6 +42,9 @@ render([${, ${ | Tail], Params, Acc) ->
             Partial = val(Key, Params),
             Value = render(Partial, Params),
             render(Tail2, Params, [Value | Acc]);
+        {[$& | Key], Tail2} ->
+            Value = to_str(val(Key, Params)),
+            render(Tail2, Params, [Value, Acc]);
         {Key, Tail2} ->
             Value = to_str(val(Key, Params)),
             render(Tail2, Params, [html_escape(Value, "") | Acc])

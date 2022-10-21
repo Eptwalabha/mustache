@@ -89,6 +89,15 @@ render_does_not_escape_html_test() ->
     ?assertEqual("&\"'",
                  mustache:render(Template, #{ html => "&\"'" })).
 
+render_with_ampersand_does_not_escape_html_test() ->
+    Template = "{{& html }}",
+    ?assertEqual("<script>",
+                 mustache:render(Template, #{ html => "<script>" })),
+    ?assertEqual("<b>test</b>",
+                 mustache:render(Template, #{ html => "<b>test</b>" })),
+    ?assertEqual("&\"'",
+                 mustache:render(Template, #{ html => "&\"'" })).
+
 render_do_not_render_sections_test() ->
     Template = "{{#section}}won't show{{/section}}",
     ?assertEqual("", mustache:render(Template)),
