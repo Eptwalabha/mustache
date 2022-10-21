@@ -99,7 +99,25 @@ fetch_tag_content([Letter | Tail], Endtag, Acc) ->
     fetch_tag_content(Tail, Endtag, [Letter | Acc]).
 
 val(Key, Map) when is_map(Map) ->
-    maps:get(atom_key(Key), Map, "").
+    Key_parts = key_to_parts(Key),
+    fetch(Key_parts, Map, "").
+
+key_to_parts(Atom) when is_atom(Atom) ->
+    key_to_parts(atom_to_list(Atom));
+key_to_parts(".") -> ['.'];
+key_to_parts(Other) ->
+    Key = string:trim(unicode:characters_to_list(Other)),
+    [list_to_atom(P) || P <- string:lexemes(Key, ".")].
+
+fetch([], _, Default) -> Default;
+fetch([Key], Map, Default) ->
+    maps:get(Key, Map, Default);
+fetch([Key | Rest], Map, Default) ->
+    case maps:get(Key, Map, not_found) of
+        not_found -> Default;
+        New_map when is_map(New_map) -> fetch(Rest, New_map, Default);
+        _ -> Default
+    end.
 
 atom_key(Atom) when is_atom(Atom) -> Atom;
 atom_key(KeyString) -> list_to_atom(string:trim(KeyString)).

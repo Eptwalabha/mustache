@@ -255,3 +255,8 @@ render_allows_mix_chardata_template_test() ->
     ?assertEqual("Hello how are yöu?",
                  mustache:render(Template, #{ test => <<"are">> })).
 
+render_dot_notation_test() ->
+    Template = "{{# a.b.c }}{{a.b.v}}{{/ a.b.c }}",
+    Map = #{ a => #{ b => #{ c => true, v => <<"Hello world">> } } },
+    ?assertEqual("Hello world", mustache:render(Template, Map)).
+
