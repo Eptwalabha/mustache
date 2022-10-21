@@ -102,8 +102,6 @@ val(Key, Map) when is_map(Map) ->
     Key_parts = key_to_parts(Key),
     fetch(Key_parts, Map, "").
 
-key_to_parts(Atom) when is_atom(Atom) ->
-    key_to_parts(atom_to_list(Atom));
 key_to_parts(".") -> ['.'];
 key_to_parts(Other) ->
     Key = string:trim(unicode:characters_to_list(Other)),
