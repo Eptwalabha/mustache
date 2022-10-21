@@ -66,7 +66,9 @@ render_escape_html_test() ->
     ?assertEqual("&lt;b&gt;test&lt;/b&gt;",
                  mustache:render(Template, #{ injection => "<b>test</b>" })),
     ?assertEqual("&amp;&quot;&apos;",
-                 mustache:render(Template, #{ injection => "&\"'" })).
+                 mustache:render(Template, #{ injection => "&\"'" })),
+    ?assertEqual("",
+                 mustache:render(Template, #{ injection => null })).
 
 render_missing_end_delimiter_escape_test() ->
     Template = "Hello {{{name",
@@ -87,7 +89,9 @@ render_does_not_escape_html_test() ->
     ?assertEqual("<b>test</b>",
                  mustache:render(Template, #{ html => "<b>test</b>" })),
     ?assertEqual("&\"'",
-                 mustache:render(Template, #{ html => "&\"'" })).
+                 mustache:render(Template, #{ html => "&\"'" })),
+    ?assertEqual("",
+                 mustache:render(Template, #{ html => null })).
 
 render_with_ampersand_does_not_escape_html_test() ->
     Template = "{{& html }}",
@@ -96,7 +100,9 @@ render_with_ampersand_does_not_escape_html_test() ->
     ?assertEqual("<b>test</b>",
                  mustache:render(Template, #{ html => "<b>test</b>" })),
     ?assertEqual("&\"'",
-                 mustache:render(Template, #{ html => "&\"'" })).
+                 mustache:render(Template, #{ html => "&\"'" })),
+    ?assertEqual("",
+                 mustache:render(Template, #{ html => null })).
 
 render_do_not_render_sections_test() ->
     Template = "{{#section}}won't show{{/section}}",

@@ -126,6 +126,7 @@ to_str(Int) when is_integer(Int) ->
     integer_to_list(Int);
 to_str(Float) when is_float(Float) ->
     io_lib:format("~p", [Float]);
+to_str(null) -> "";
 to_str(Atom) when is_atom(Atom) ->
     atom_to_list(Atom);
 to_str(Binary) when is_binary(Binary) ->
