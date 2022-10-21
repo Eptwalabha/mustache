@@ -107,7 +107,6 @@ key_to_parts(Other) ->
     Key = string:trim(unicode:characters_to_list(Other)),
     [list_to_atom(P) || P <- string:lexemes(Key, ".")].
 
-fetch([], _, Default) -> Default;
 fetch([Key], Map, Default) ->
     maps:get(Key, Map, Default);
 fetch([Key | Rest], Map, Default) ->

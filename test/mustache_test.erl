@@ -249,7 +249,7 @@ render_allows_proplists_test() ->
                "{{#elements}} {{.}}{{/elements}} "
                "{{something}}",
     Proplist = [{friend, [{name, "John"}, {surname, "Joe"}]},
-                {elements, ["Peter", "Loïs"]},
+                {"elements", ["Peter", "Loïs"]},
                 {something, else}],
     ?assertEqual("Hello John (Joe) Peter Loïs else",
                  mustache:render(Template, Proplist)).
@@ -265,4 +265,9 @@ render_dot_notation_test() ->
     Template = "{{# a.b.c }}{{a.b.v}}{{/ a.b.c }}",
     Map = #{ a => #{ b => #{ c => true, v => <<"Hello world">> } } },
     ?assertEqual("Hello world", mustache:render(Template, Map)).
+
+render_dot_notation_not_found_test() ->
+    Template = "{{# a.b.c }}{{a.b}}{{/ a.b.c }}",
+    Map = #{ a => #{ b => 123 } },
+    ?assertEqual("", mustache:render(Template, Map)).
 
