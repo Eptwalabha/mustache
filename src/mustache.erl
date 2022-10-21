@@ -99,8 +99,8 @@ fetch_tag_content([Letter | Tail], Endtag, Acc) ->
     fetch_tag_content(Tail, Endtag, [Letter | Acc]).
 
 val(Key, Map) when is_map(Map) ->
-    Key_parts = key_to_parts(Key),
-    fetch(Key_parts, Map, "").
+    KeyParts = key_to_parts(Key),
+    fetch(KeyParts, Map, "").
 
 key_to_parts(".") -> ['.'];
 key_to_parts(Other) ->
@@ -113,7 +113,7 @@ fetch([Key], Map, Default) ->
 fetch([Key | Rest], Map, Default) ->
     case maps:get(Key, Map, not_found) of
         not_found -> Default;
-        New_map when is_map(New_map) -> fetch(Rest, New_map, Default);
+        NewMap when is_map(NewMap) -> fetch(Rest, NewMap, Default);
         _ -> Default
     end.
 
