@@ -17,43 +17,42 @@ render(Template, Params) ->
 
 render([], _, Acc) -> ?FLAT(?REV(Acc));
 render([${, ${, ${ | Tail], Params, Acc) ->
-    case fetch_tag_content(Tail, "}}}") of
-        end_delimiter_error ->
+    case parse_tag(Tail, "{{{") of
+        missing_end_tag ->
             render(Tail, Params, [${, ${, ${ | Acc]);
-        {Key, Tail2} ->
+        {Key, _, Tail2} ->
             Value = to_str(val(Key, Params)),
             render(Tail2, Params, [Value | Acc])
     end;
 render([${, ${ | Tail], Params, Acc) ->
-    case fetch_tag_content(Tail, "}}") of
-        end_delimiter_error ->
+    case parse_tag(Tail, "{{") of
+        missing_end_tag ->
             render(Tail, Params, [${, ${ | Acc]);
-        {[$! | _], Tail2} ->
+        {comment, _, Tail2} ->
             render(Tail2, Params, Acc);
-        {[Char | Key], Tail2} when Char =:= $#; Char =:= $^ ->
+        {{Section_type, Key}, _, Tail2}
+          when Section_type =:= section;
+               Section_type =:= inverted ->
             {Section, Tail3} = fetch_section(Tail2, Key),
             Value = val(Key, Params),
-            Rendered = case can_render(Value, is_inverted(Char)) of
+            Rendered = case can_render(Value, Section_type =:= inverted) of
                            true -> render_section(Section, Params, Value);
                            _ -> ""
                        end,
             render(Tail3, Params, [Rendered | Acc]);
-        {[$> | Key], Tail2} ->
+        {{partial, Key}, _, Tail2} ->
             Partial = val(Key, Params),
             Value = render(Partial, Params),
             render(Tail2, Params, [Value | Acc]);
-        {[$& | Key], Tail2} ->
+        {{no_escape, Key}, _, Tail2} ->
             Value = to_str(val(Key, Params)),
             render(Tail2, Params, [Value, Acc]);
-        {Key, Tail2} ->
+        {Key, _, Tail2} ->
             Value = to_str(val(Key, Params)),
             render(Tail2, Params, [html_escape(Value, "") | Acc])
     end;
 render([Letter | Tail], Params, Acc) ->
     render(Tail, Params, [Letter | Acc]).
-
-is_inverted($^) -> true;
-is_inverted(_) -> false.
 
 can_render(Value, IsInverted) ->
     is_empty_or_false(Value) =:= IsInverted.
@@ -63,6 +62,9 @@ is_empty_or_false(Value) ->
 
 render_section(Template, Params, "") ->
     render(Template, Params);
+render_section(Template, Params, Lambda)
+  when is_function(Lambda, 1) ->
+    render(Lambda(Template), Params);
 render_section(Template, Params, Lambda)
   when is_function(Lambda, 2) ->
     Render = fun (NewTemplate) -> render(NewTemplate, Params) end,
@@ -84,19 +86,35 @@ update_params_context(Map, Map2)
 update_params_context(Map, Item) ->
     maps:merge(Map, #{ '.' => Item }).
 
-fetch_tag_content(Content, Endtag) ->
-    fetch_tag_content(Content, Endtag, "").
+parse_tag(Content, StartTag) ->
+    EndTag = case StartTag of
+                 "{{{" -> "}}}";
+                 "{{" -> "}}"
+             end,
+    case parse_tag(Content, EndTag, "") of
+        missing_end_tag -> missing_end_tag;
+        {RawTag, Tail} ->
+            FullTag = StartTag ++ RawTag ++ EndTag,
+            {parse_tag_name(RawTag), FullTag, Tail}
+    end.
 
-fetch_tag_content([], _, _) ->
-    end_delimiter_error;
-fetch_tag_content([A, B, C | Tail], [A, B, C], Acc) ->
-    {string:trim(?REV(Acc)), Tail};
-fetch_tag_content([A, B | Tail], [A, B], Acc) ->
-    {string:trim(?REV(Acc)), Tail};
-fetch_tag_content([$} | _], _, _) ->
-    end_delimiter_error;
-fetch_tag_content([Letter | Tail], Endtag, Acc) ->
-    fetch_tag_content(Tail, Endtag, [Letter | Acc]).
+parse_tag([], _, _) ->
+    missing_end_tag;
+parse_tag([A, B, C | Tail], [A, B, C], Acc) ->
+    {?REV(Acc),  Tail};
+parse_tag([A, B | Tail], [A, B], Acc) ->
+    {?REV(Acc), Tail};
+parse_tag([$} | _], _, _) ->
+    missing_end_tag;
+parse_tag([Letter | Tail], EndTag, Acc) ->
+    parse_tag(Tail, EndTag, [Letter | Acc]).
+
+parse_tag_name([$! | _]) -> comment;
+parse_tag_name([$# | Tag]) -> {section, string:trim(Tag)};
+parse_tag_name([$^ | Tag]) -> {inverted, string:trim(Tag)};
+parse_tag_name([$& | Tag]) -> {no_escape, string:trim(Tag)};
+parse_tag_name([$> | Tag]) -> {partial, string:trim(Tag)};
+parse_tag_name(Tag) -> string:trim(Tag).
 
 val(Key, Map) when is_map(Map) ->
     KeyParts = key_to_parts(Key),
@@ -139,9 +157,9 @@ html_escape([$' | Tail], Acc) -> html_escape(Tail, ["&apos;" | Acc]);
 html_escape([$& | Tail], Acc) -> html_escape(Tail, ["&amp;" | Acc]);
 html_escape([Char | Tail], Acc) -> html_escape(Tail, [Char | Acc]).
 
-fetch_section(Template, Endtag) ->
+fetch_section(Template, EndTag) ->
     ReOptions = [unicode, {return, list}],
-    [Section | Tail] = re:split(Template, "{{/" ++ Endtag ++ "}}", ReOptions),
+    [Section | Tail] = re:split(Template, "{{/" ++ EndTag ++ "}}", ReOptions),
     {Section, ?FLAT(Tail)}.
 
 to_map(Map) when is_map(Map) -> Map;
