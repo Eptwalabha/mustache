@@ -49,8 +49,8 @@ render_type_test() ->
              float => 10.01,
              string => "strïng",
              binary => <<"bïnary"/utf8>>,
-             bool => false },
-    ?assertEqual("atom, 10, 10.01, strïng, bïnary, false",
+             bool => true },
+    ?assertEqual("atom, 10, 10.01, strïng, bïnary, true",
                  mustache:render(Template, Map)).
 
 render_unicode_test() ->
