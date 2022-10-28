@@ -194,6 +194,21 @@ render_section_with_lambda_test() ->
     ?assertEqual("ラムダ: <b>hellö wōrld</b>",
                  mustache:render(Template, Map)).
 
+render_section_substitution_with_lambda_test() ->
+    Lambda = fun () -> "<Hellö>" end,
+    Template = "ラムダ: {{lambda}} {{&lambda}}",
+    Map = #{ lambda => Lambda },
+    ?assertEqual("ラムダ: &lt;Hellö&gt; <Hellö>",
+                 mustache:render(Template, Map)).
+
+render_section_substitution_with_lambda_are_compiled_test() ->
+    Lambda = fun () -> "Hëllo <{{who}}>" end,
+    Template = "{{&lambda}}",
+    Map = #{ lambda => Lambda,
+             who => <<"wōrld">> },
+    ?assertEqual("Hëllo <wōrld>",
+                 mustache:render(Template, Map)).
+
 render_section_with_no_endtag_test() ->
     Template = "Dwarves: {{#dwarves}}{{.}},",
     Map = #{ dwarves => ["Doc", "Happy", "Bashful", "Grumpy",
@@ -229,9 +244,11 @@ render_partial_section_not_defined_test() ->
     Template = "{{>does-not-exists}}",
     ?assertEqual("", mustache:render(Template)).
 
+-ifdef(capturedOutput).
 main_only_template_test() ->
     mustache:main(["Hello {{name}}!"]),
     ?assertEqual("Hello !\n", ?capturedOutput).
+-endif.
 
 render_multiple_sections_test() ->
     Template = "{{#items}}- {{name}}\n{{/items}}"
@@ -245,13 +262,16 @@ render_multiple_sections_test() ->
                  mustache:render(Template, Map)).
 
 render_allows_proplists_test() ->
-    Template = "Hello {{#friend}}{{name}} ({{surname}}){{/friend}}"
+    Template = "\n"
+               "Hello {{#friend}}{{name}} ({{surname}}){{/friend}}"
                "{{#elements}} {{.}}{{/elements}} "
-               "{{something}}",
+               "{{something}} - "
+               "{{#map.proplist}}{{.}}, {{/map.proplist}}",
     Proplist = [{friend, [{name, "John"}, {surname, "Joe"}]},
                 {"elements", ["Peter", "Loïs"]},
-                {something, else}],
-    ?assertEqual("Hello John (Joe) Peter Loïs else",
+                {something, else},
+                {map, #{ proplist => ["a", <<"b">>] }}],
+    ?assertEqual("\nHello John (Joe) Peter Loïs else - a, b, ",
                  mustache:render(Template, Proplist)).
 
 render_allows_mix_chardata_template_test() ->

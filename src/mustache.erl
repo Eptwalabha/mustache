@@ -52,7 +52,6 @@ to_str(Int) when is_integer(Int) ->
     integer_to_list(Int);
 to_str(Float) when is_float(Float) ->
     io_lib:format("~p", [Float]);
-to_str(null) -> "";
 to_str(Atom) when is_atom(Atom) ->
     atom_to_list(Atom);
 to_str(Binary) when is_binary(Binary) ->
@@ -123,31 +122,45 @@ render([{SectionType, Key, SectionAST, _} | Tail], Params, Acc)
 render([{SubstitutionType, Key, _} | Tail], Params, Acc)
   when SubstitutionType =:= variable;
        SubstitutionType =:= no_escape ->
-    Value = to_str(val(Key, Params)),
-    Acc2 = case {SubstitutionType, is_empty_or_false(Value)} of
-               {_, true} -> Acc;
-               {no_escape, _} -> [Value | Acc];
-               _ -> [html_escape(Value, "") | Acc]
-           end,
-    render(Tail, Params, Acc2);
+    Value = val(Key, Params),
+    case is_empty_or_false(Value) of
+        true -> render(Tail, Params, Acc);
+        _ ->
+            Escape = SubstitutionType =:= variable,
+            Value2 = substitute(Value, Params, Escape),
+            render(Tail, Params, [Value2 | Acc])
+    end;
 render([List | Tail], Params, Acc) when is_list(List) ->
     render(Tail, Params, [List | Acc]);
 render([_ | Tail], Params, Acc) ->
     render(Tail, Params, Acc).
 
+substitute(Lambda, Params, Escape) when is_function(Lambda, 0) ->
+    Value = render(to_str(Lambda()), Params),
+    case Escape of
+        true -> html_escape(Value, "");
+        _ -> Value
+    end;
+substitute(RawValue, _, Escape) ->
+    Value = to_str(RawValue),
+    case Escape of
+        true -> html_escape(Value, "");
+        _ -> Value
+    end.
+
 render_section(AST, Params, Lambda)
-  when is_function(Lambda) ->
+  when is_function(Lambda, 1);
+       is_function(Lambda, 2) ->
     Template = ast_to_template(AST),
-    NewTemplate = case proplists:get_value(arity, erlang:fun_info(Lambda)) of
-                      0 -> Lambda();
-                      1 -> Lambda(Template);
-                      2 ->
+    NewTemplate = case is_function(Lambda, 1) of
+                      true -> Lambda(Template);
+                      _ ->
                           NewParams = update_params_context(Params, Lambda),
                           Renderer = fun (NewTemplate) ->
                                              NewAST = compile(NewTemplate),
                                              render(NewAST, NewParams, [])
                                      end,
-                          render(Lambda(Template, Renderer), Params)
+                          Lambda(Template, Renderer)
                   end,
     ?REV(render(compile(NewTemplate), Params, []));
 render_section(AST, Params, "") ->
@@ -171,7 +184,6 @@ compile(Content) ->
     {Ast, _, _} = ast(Cleaned_tokens, null, []),
     Ast.
 
-tokenize([], _, null) -> [];
 tokenize([], _, {[], Acc}) -> ?REV(Acc);
 tokenize([], _, {LineAcc, Acc}) ->
     ?REV([?REV(commit_line(LineAcc)) | Acc]);
@@ -213,7 +225,6 @@ tokenize([Letter | Tail] = Template, Options, Acc) ->
 
 tag_tokenize(Template, #{ start_tag := Start, end_tag := End }) ->
     case parse_tag(Template, {Start, End}) of
-        missmatch_start_tag -> error;
         missing_end_tag -> error;
         {[$= | _] = TagContent, Tail} ->
             case string:lexemes(string:trim(TagContent, both, "="), " \n\t") of
@@ -281,6 +292,7 @@ clean(Lines) ->
     lists:flatmap(fun clean_tokens/1, Lines).
 
 clean_tokens([new_line]) -> [new_line];
+clean_tokens(new_line) -> [new_line];
 clean_tokens(Line) ->
     case trim(Line) of
         [] -> [];
@@ -317,7 +329,6 @@ process_item({string, String}, Acc) -> [String | Acc];
 process_item({blank, String}, Acc) -> [String | Acc];
 process_item({comment, _, _}, Acc) -> Acc;
 process_item({delimiter, _, _, _}, Acc) -> Acc;
-process_item({end_section, _, _}, Acc) -> Acc;
 process_item(Other, Acc) -> [Other | Acc].
 
 ast_to_template(List) ->
