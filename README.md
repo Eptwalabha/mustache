@@ -3,11 +3,10 @@
 [![Erlang CI](https://github.com/Eptwalabha/mustache/actions/workflows/erlang.yml/badge.svg)](https://github.com/Eptwalabha/mustache/actions/workflows/erlang.yml)
 
 A library to render [Mustach](https://mustache.github.io/) templates.  
-It tries to comply with the [Mustache's manual](https://mustache.github.io/mustache.5.html) as close as possible.
+It tries to comply with the [Mustache's manual](https://mustache.github.io/mustache.5.html) as [close as possible](#specs).
 
 > :warning: While all major features are present, this library is still under development. The following have yet to be added:
 > - fetch template & partials from file
-> - allow [different delimiter](https://mustache.github.io/mustache.5.html#Set-Delimiter)
 
 ## Usage
 
@@ -23,20 +22,22 @@ It tries to comply with the [Mustache's manual](https://mustache.github.io/musta
 The section **Non-Empty Lists** of the [manual](https://mustache.github.io/mustache.5.html#Sections), states that a section should be displayed as many time as there's element in the list.  
 The problem is that erlang's strings [are lists](https://learnyousomeerlang.com/starting-out-for-real#highlighter_829076), which means that the following code will display as such:
 ``` erlang
-> mustache:render("{{#string}}oups!{{/string}}", #{ string => "hello" }).
+> Data = #{ string => "hello" }.
+> mustache:render("{{#string}}oups!{{/string}}", Data).
 "oups!oups!oups!oups!oups!"
 ```
-To avoid this kind of problem, use binary instead:
+Use binary to avoid this issue:
 ``` erlang
-> mustache:render("{{#string}}ok{{/string}}", #{ string => <<"hello">> }).
+> Data = #{ string => <<"hello">> }.
+> mustache:render("{{#string}}ok{{/string}}", Data).
 "ok"
 ```
 
 ## Sections and Lambdas
 ``` erlang
-> Fun = fun (Template, Render) ->
-                New_template = "<strong>" ++ Template ++ "</strong>",
-                Render(New_template)
+> Fun = fun (Template) ->
+                % in here Template = "hello {{name}}",
+                "<strong>" ++ Template ++ "</strong>"
         end.
 > Map = #{ name => "Tom", lambda => Fun }.
 > mustache:render("{{#lambda}}hello {{name}}{{/lambda}}", Map).
@@ -51,20 +52,33 @@ Tags that begin with a bang (`!`) won't be displayed:
 ```
 
 ## Partials
-Tags that begin with `>` will include external template.
+Tags that begin with `>` will include external template or "partials".
 
-### Using `Map`
-Partial can be stored in the Parameters used to render the template like so:
+`mustache:render` takes a third arguments for partials:
 ``` erlang
-> Map = #{ ducks => ["Huey", "Dewey", "Louie"],
-           item => "- {{.}}\n" }.
 > Template = "ducks:\n{{#ducks}}{{>item}}{{/ducks}}".
-> mustache:render(Template, Map).
+> Map = #{ ducks => ["Huey", "Dewey", "Louie"] }.
+> Partials = #{ item => "- {{.}}\n" }.
+> mustache:render(Template, Map, Partials).
 "ducks:\n- Huey\n- Dewey\n- Louie\n"
 ```
 
-### Using files
-> Comming soon
+### From file
+If not given to `render`, Partials will be directly fetched from file  
+> This feature is comming soon
+
+## Specs
+This lib complies with the following specs
+
+- [x] comments
+- [x] delimiters
+- [ ] dynamic-names
+- [ ] inheritance
+- [x] interpolation
+- [x] inverted
+- [ ] lambdas
+- [ ] partials
+- [x] sections
 
 ## Copyright
 
