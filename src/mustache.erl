@@ -1,11 +1,15 @@
 -module(mustache).
 
--export([render/1, render/2]).
+-export([render/1, render/2, render/3]).
 -export([compile/1]).
 -export([main/1]).
 
 -define(REV(L), lists:reverse(L)).
 -define(FLAT(L), lists:flatten(L)).
+
+-record(context, { params = #{},
+                   partials = #{},
+                   delimiter = { "{{", "}}" } }).
 
 main([Template | _]) ->
     io:fwrite("~ts~n", [render(Template)]).
@@ -13,11 +17,11 @@ main([Template | _]) ->
 is_empty_or_false(Value) ->
     lists:member(Value, [<<"">>, [], false, null]).
 
-update_params_context(Map, Map2)
+update_params_context(#context{ params = Map } = Context, Map2)
   when is_map(Map), is_map(Map2) ->
-    maps:merge(Map, Map2);
-update_params_context(Map, Item) ->
-    maps:merge(Map, #{ '.' => Item }).
+    Context#context{ params = maps:merge(Map, Map2) };
+update_params_context(#context{ params = Map } = Context, Item) ->
+    Context#context{ params = maps:merge(Map, #{ '.' => Item }) }.
 
 parse_tag_name([$! | Comment]) -> {comment, string:trim(Comment)};
 parse_tag_name([$# | Tag]) -> {section, string:trim(Tag)};
@@ -27,7 +31,7 @@ parse_tag_name([$> | Tag]) -> {partial, string:trim(Tag)};
 parse_tag_name([$/ | Tag]) -> {end_section, string:trim(Tag)};
 parse_tag_name(Tag) -> string:trim(Tag).
 
-val(Key, Map) when is_map(Map) ->
+val(Key, #context{ params = Map}) when is_map(Map) ->
     KeyParts = key_to_parts(Key),
     fetch(KeyParts, Map, "").
 
@@ -99,44 +103,52 @@ to_map([{KeyRaw, Value} | Rest], Map) ->
     to_map(Rest, Map2).
 
 render(RawTemplate) ->
-    render(RawTemplate, #{}).
+    render(RawTemplate, #{}, #{}).
 
 render(RawTemplate, Params) ->
-    Template = unicode:characters_to_list(RawTemplate),
-    Ast = compile(Template),
-    render(Ast, to_map(Params), "").
+    render(RawTemplate, Params, #{}).
 
-render([], _, Acc) -> ?FLAT(?REV(Acc));
-render([new_line | Tail], Params, Acc) ->
-    render(Tail, Params, [$\n | Acc]);
-render([{SectionType, Key, SectionAST, _} | Tail], Params, Acc)
+render(RawTemplate, Params, RawPartials) ->
+    _Partials = compile_partials(RawPartials),
+    AST = compile(RawTemplate),
+    Context = #context{ params = to_map(Params),
+                        partials = compile_partials(RawPartials) },
+    do_render(AST, Context, "").
+
+do_render([], _, Acc) -> ?FLAT(?REV(Acc));
+do_render([{delimiter, _, NewDelimiter, _} | Tail], Context, Acc) ->
+    do_render(Tail, Context#context{ delimiter = NewDelimiter }, Acc);
+do_render([new_line | Tail], Context, Acc) ->
+    do_render(Tail, Context, [$\n | Acc]);
+do_render([{SectionType, Key, SectionAST, _} | Tail], Context, Acc)
   when SectionType =:= section;
        SectionType =:= inverted ->
-    Value = val(Key, Params),
+    Value = val(Key, Context),
     IsInverted = (SectionType =:= inverted),
     Rendered = case is_empty_or_false(Value) of
-                   IsInverted -> render_section(SectionAST, Params, Value);
+                   IsInverted -> render_section(SectionAST, Context, Value);
                    _ -> []
                end,
-    render(Tail, Params, Rendered ++ Acc);
-render([{SubstitutionType, Key, _} | Tail], Params, Acc)
+    do_render(Tail, Context, Rendered ++ Acc);
+do_render([{SubstitutionType, Key, _} | Tail], Context, Acc)
   when SubstitutionType =:= variable;
        SubstitutionType =:= no_escape ->
-    Value = val(Key, Params),
+    Value = val(Key, Context),
     case is_empty_or_false(Value) of
-        true -> render(Tail, Params, Acc);
+        true -> do_render(Tail, Context, Acc);
         _ ->
             Escape = SubstitutionType =:= variable,
-            Value2 = substitute(Value, Params, Escape),
-            render(Tail, Params, [Value2 | Acc])
+            Value2 = substitute(Value, Context, Escape),
+            do_render(Tail, Context, [Value2 | Acc])
     end;
-render([List | Tail], Params, Acc) when is_list(List) ->
-    render(Tail, Params, [List | Acc]);
-render([_ | Tail], Params, Acc) ->
-    render(Tail, Params, Acc).
+do_render([List | Tail], Context, Acc) when is_list(List) ->
+    do_render(Tail, Context, [List | Acc]);
+do_render([_ | Tail], Context, Acc) ->
+    do_render(Tail, Context, Acc).
 
-substitute(Lambda, Params, Escape) when is_function(Lambda, 0) ->
-    Value = render(to_str(Lambda()), Params),
+substitute(Lambda, Context, Escape) when is_function(Lambda, 0) ->
+    Ast = compile(to_str(Lambda())),
+    Value = do_render(Ast, Context, []),
     case Escape of
         true -> html_escape(Value, "");
         _ -> Value
@@ -148,41 +160,53 @@ substitute(RawValue, _, Escape) ->
         _ -> Value
     end.
 
-render_section(AST, Params, Lambda)
+render_section(AST, Context, Lambda)
   when is_function(Lambda, 1);
        is_function(Lambda, 2) ->
     Template = ast_to_template(AST),
+    {StartTag, EndTag} = Context#context.delimiter,
+    Options = #{ start_tag => StartTag, end_tag => EndTag },
     NewTemplate = case is_function(Lambda, 1) of
                       true -> Lambda(Template);
                       _ ->
-                          NewParams = update_params_context(Params, Lambda),
+                          NewContext = update_params_context(Context, Lambda),
                           Renderer = fun (NewTemplate) ->
-                                             NewAST = compile(NewTemplate),
-                                             render(NewAST, NewParams, [])
+                                             NewAST = compile(NewTemplate, Options),
+                                             do_render(NewAST, NewContext, [])
                                      end,
                           Lambda(Template, Renderer)
                   end,
-    ?REV(render(compile(NewTemplate), Params, []));
-render_section(AST, Params, "") ->
-    NewParams = update_params_context(Params, ""),
-    ?REV(render(AST, NewParams, []));
-render_section(AST, Params, Value)
+    ?REV(do_render(compile(NewTemplate, Options), Context, []));
+render_section(AST, Context, "") ->
+    NewContext = update_params_context(Context, ""),
+    ?REV(do_render(AST, NewContext, []));
+render_section(AST, Context, Value)
   when is_list(Value) ->
     Fun = fun (Item) ->
-                  NewParams = update_params_context(Params, Item),
-                  render(AST, NewParams, [])
+                  NewContext = update_params_context(Context, Item),
+                  do_render(AST, NewContext, [])
           end,
     ?REV(lists:map(Fun, Value));
-render_section(AST, Params, Value) ->
-    NewParams = update_params_context(Params, Value),
-    ?REV(render(AST, NewParams, [])).
+render_section(AST, Context, Value) ->
+    NewContext = update_params_context(Context, Value),
+    ?REV(do_render(AST, NewContext, [])).
 
 compile(Content) ->
     Options = #{ start_tag => "{{", end_tag => "}}" },
-    Tokens = tokenize(Content, Options, null),
+    compile(Content, Options).
+
+compile(RawTemplate, Options) ->
+    Template = unicode:characters_to_list(RawTemplate),
+    Tokens = tokenize(Template, Options, null),
     Cleaned_tokens = clean(Tokens),
     {Ast, _, _} = ast(Cleaned_tokens, null, []),
     Ast.
+
+compile_partials(RawPartials) ->
+    Fun = fun (PartialName, RawPatial, Acc) ->
+                  Acc#{ PartialName => compile(RawPatial) }
+          end,
+    maps:fold(Fun, #{}, RawPartials).
 
 tokenize([], _, {[], Acc}) -> ?REV(Acc);
 tokenize([], _, {LineAcc, Acc}) ->
@@ -199,8 +223,8 @@ tokenize([${, ${, ${ | Tail] = Template, #{ start_tag := "{{" } = Options, Acc) 
             Acc2 = push_acc({string, "{{{"}, Acc),
             tokenize(Tail, Options, Acc2)
     end;
-tokenize([Letter | Tail] = Template, Options, Acc) ->
-    case is_start_tag(Template, Options) of
+tokenize([Letter | Tail] = Template, #{ start_tag := StartTag } = Options, Acc) ->
+    case start_with(Template, StartTag) of
         true ->
             case tag_tokenize(Template, Options) of
                 error ->
@@ -266,10 +290,9 @@ commit_line([{string, RevString} | Acc]) ->
     end;
 commit_line(Acc) -> Acc.
 
-is_start_tag([A | _], #{ start_tag := [A] }) -> true;
-is_start_tag([A, B | _], #{ start_tag := [A, B] }) -> true;
-is_start_tag([A, B, C | _], #{ start_tag := [A, B, C] }) -> true;
-is_start_tag(_, _) -> false.
+start_with(_, []) -> true;
+start_with([A | Tail], [A | Tail2]) -> start_with(Tail, Tail2);
+start_with(_, _) -> false.
 
 parse_tag([A | Tail], {[A], EndTag}) ->
     parse_tag(Tail, EndTag, "");
@@ -296,6 +319,7 @@ clean_tokens(new_line) -> [new_line];
 clean_tokens(Line) ->
     case trim(Line) of
         [] -> [];
+        [{delimiter, _, _, _} = Delimiter] -> [Delimiter];
         [{section, _, _} = Section] -> [Section];
         [{inverted, _, _} = Section] -> [Section];
         [{end_section, _, _} = Section] -> [Section];
@@ -309,7 +333,6 @@ trim(Tokens) ->
 trim_tokens([]) -> [];
 trim_tokens([{blank, _} | Tokens]) -> trim_tokens(Tokens);
 trim_tokens([{comment, _, _} | Tokens]) -> trim_tokens(Tokens);
-trim_tokens([{delimiter, _, _, _} | Tokens]) -> trim_tokens(Tokens);
 trim_tokens([new_line | Tokens]) -> trim_tokens(Tokens);
 trim_tokens(Tokens) -> Tokens.
 
@@ -328,7 +351,6 @@ ast([Item | Tail], SectionName, Acc) ->
 process_item({string, String}, Acc) -> [String | Acc];
 process_item({blank, String}, Acc) -> [String | Acc];
 process_item({comment, _, _}, Acc) -> Acc;
-process_item({delimiter, _, _, _}, Acc) -> Acc;
 process_item(Other, Acc) -> [Other | Acc].
 
 ast_to_template(List) ->

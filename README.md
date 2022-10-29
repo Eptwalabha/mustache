@@ -68,7 +68,7 @@ If not given to `render`, Partials will be directly fetched from file
 > This feature is comming soon
 
 ## Specs
-This lib complies with the following specs
+This library complies with the following specs:
 
 - [x] comments
 - [x] delimiters
@@ -76,7 +76,7 @@ This lib complies with the following specs
 - [ ] inheritance
 - [x] interpolation
 - [x] inverted
-- [ ] lambdas
+- [x] lambdas
 - [ ] partials
 - [x] sections
 

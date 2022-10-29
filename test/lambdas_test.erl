@@ -40,7 +40,8 @@ interpolation_test() ->
 %% @doc A lambda's return value should be parsed.
 interpolation_expansion_test() ->
     Template = <<"Hello, {{lambda}}!">>,
-    Data = #{ lambda => fun () -> "{{planet}}" end,
+    Lambda = fun () -> "{{planet}}" end,
+    Data = #{ lambda => Lambda,
               planet => <<"world">> },
     Expected = <<"Hello, world!">>,
     ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
@@ -48,7 +49,8 @@ interpolation_expansion_test() ->
 %% @doc A lambda's return value should parse with the default delimiters.
 interpolation_alternate_delimiters_test() ->
     Template = <<"{{= | | =}}\nHello, (|&lambda|)!">>,
-    Data = #{ lambda => fun () -> "|planet| => {{planet}}" end,
+    Lambda = fun () -> "|planet| => {{planet}}" end,
+    Data = #{ lambda => Lambda,
               planet => <<"world">> },
     Expected = <<"Hello, (|planet| => world)!">>,
     ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
@@ -56,10 +58,12 @@ interpolation_alternate_delimiters_test() ->
 %% @doc Interpolated lambdas should not be cached.
 interpolation_multiple_calls_test() ->
     Template = <<"{{lambda}} == {{{lambda}}} == {{lambda}}">>,
-    put(interpolation_multiple_calls_test, 1),
     Lambda = fun () ->
-                     Call = get(interpolation_multiple_calls_test),
-                     put(interpolation_multiple_calls_test, Call + 1),
+                     Call = case get(call) of
+                                undefined -> 1;
+                                N -> N
+                            end,
+                     put(call, Call + 1),
                      Call
              end,
     Data = #{ lambda => Lambda },
@@ -69,7 +73,8 @@ interpolation_multiple_calls_test() ->
 %% @doc Lambda results should be appropriately escaped.
 escaping_test() ->
     Template = <<"<{{lambda}}{{{lambda}}}">>,
-    Data = #{ lambda => fun () -> ">" end },
+    Lambda = fun () -> ">" end,
+    Data = #{ lambda => Lambda },
     Expected = <<"<&gt;>">>,
     ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
 
@@ -86,9 +91,7 @@ section_test() ->
 %% @doc Lambdas used for sections should have their results parsed.
 section_expansion_test() ->
     Template = <<"<{{#lambda}}-{{/lambda}}>">>,
-    Lambda = fun (Text) ->
-                     Text ++ "{{planet}}" ++ Text
-             end,
+    Lambda = fun (Text) -> Text ++ "{{planet}}" ++ Text end,
     Data = #{ lambda => Lambda,
               planet => <<"Earth">> },
     Expected = <<"<-Earth->">>,
@@ -97,9 +100,7 @@ section_expansion_test() ->
 %% @doc Lambdas used for sections should parse with the current delimiters.
 section_alternate_delimiters_test() ->
     Template = <<"{{= | | =}}<|#lambda|-|/lambda|>">>,
-    Lambda = fun (Text) ->
-                     Text ++ "{{planet}} => |planet|" ++ Text
-             end,
+    Lambda = fun (Text) -> Text ++ "{{planet}} => |planet|" ++ Text end,
     Data = #{ lambda => Lambda,
               planet => <<"Earth">> },
     Expected = <<"<-{{planet}} => Earth->">>,
@@ -108,9 +109,7 @@ section_alternate_delimiters_test() ->
 %% @doc Lambdas used for sections should not be cached.
 section_multiple_calls_test() ->
     Template = <<"{{#lambda}}FILE{{/lambda}} != {{#lambda}}LINE{{/lambda}}">>,
-    Lambda = fun (Text) ->
-                     "__" ++ Text ++ "__"
-             end,
+    Lambda = fun (Text) -> "__" ++ Text ++ "__" end,
     Data = #{ lambda => Lambda },
     Expected = <<"__FILE__ != __LINE__">>,
     ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
@@ -118,7 +117,8 @@ section_multiple_calls_test() ->
 %% @doc Lambdas used for inverted sections should be considered truthy.
 inverted_section_test() ->
     Template = <<"<{{^lambda}}{{static}}{{/lambda}}>">>,
-    Data = #{ lambda => fun (_) -> false end,
+    Lambda = fun (_) -> false end,
+    Data = #{ lambda => Lambda,
               static => <<"static">> },
     Expected = <<"<>">>,
     ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
