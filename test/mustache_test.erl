@@ -205,7 +205,7 @@ render_section_substitution_with_lambda_are_compiled_test() ->
     Lambda = fun () -> "Hëllo <{{who}}>" end,
     Template = "{{&lambda}}",
     Map = #{ lambda => Lambda,
-             who => <<"wōrld">> },
+             who => <<"wōrld"/utf8>> },
     ?assertEqual("Hëllo <wōrld>",
                  mustache:render(Template, Map)).
 

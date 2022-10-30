@@ -59,15 +59,19 @@ inverted_sections_test() ->
 partial_inheritence_test() ->
     Template = <<"[ {{>include}} ]\n{{= | | =}}\n[ |>include| ]\n">>,
     Data = #{value => <<"yes">>},
+    Partials = #{ include => ".{{value}}." },
     Expected = <<"[ .yes. ]\n[ .yes. ]\n">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc Delimiters set in a partial should not affect the parent template.
 postpartial_behavior_test() ->
     Template = <<"[ {{>include}} ]\n[ .{{value}}.  .|value|. ]\n">>,
     Data = #{value => <<"yes">>},
+    Partials = #{ include => ".{{value}}. {{= | | =}} .|value|." },
     Expected = <<"[ .yes.  .yes. ]\n[ .yes.  .|value|. ]\n">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc Surrounding whitespace should be left untouched.
 surrounding_whitespace_test() ->

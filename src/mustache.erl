@@ -63,13 +63,16 @@ to_str(Binary) when is_binary(Binary) ->
 to_str(String) when is_list(String) ->
     String.
 
-html_escape([], Acc) -> ?REV(Acc);
-html_escape([$< | Tail], Acc) -> html_escape(Tail, ["&lt;" | Acc]);
-html_escape([$> | Tail], Acc) -> html_escape(Tail, ["&gt;" | Acc]);
-html_escape([$" | Tail], Acc) -> html_escape(Tail, ["&quot;" | Acc]);
-html_escape([$' | Tail], Acc) -> html_escape(Tail, ["&apos;" | Acc]);
-html_escape([$& | Tail], Acc) -> html_escape(Tail, ["&amp;" | Acc]);
-html_escape([Char | Tail], Acc) -> html_escape(Tail, [Char | Acc]).
+escape(Value, true) -> do_escape(Value, "");
+escape(Value, _) -> Value.
+
+do_escape([], Acc) -> ?REV(Acc);
+do_escape([$< | Tail], Acc) -> do_escape(Tail, ["&lt;" | Acc]);
+do_escape([$> | Tail], Acc) -> do_escape(Tail, ["&gt;" | Acc]);
+do_escape([$" | Tail], Acc) -> do_escape(Tail, ["&quot;" | Acc]);
+do_escape([$' | Tail], Acc) -> do_escape(Tail, ["&apos;" | Acc]);
+do_escape([$& | Tail], Acc) -> do_escape(Tail, ["&amp;" | Acc]);
+do_escape([Char | Tail], Acc) -> do_escape(Tail, [Char | Acc]).
 
 to_map(Map) when is_map(Map) ->
     to_map(Map, #{});
@@ -86,21 +89,20 @@ to_map(Map, Acc) when is_map(Map) ->
     Fun = fun (Key, Value, MapAcc) when is_map(Value) ->
                   MapAcc#{ Key => to_map(Value, #{}) };
               (Key, [_ | _] = List, MapAcc) when is_list(List) ->
-                  case is_proplist(List) of
-                      true -> MapAcc#{ Key => to_map(List, #{}) };
-                      _ -> MapAcc#{ Key => List }
-                  end;
+                  MapAcc#{ Key => list_to_map(List) };
               (Key, Value, MapAcc) ->
                   MapAcc#{ Key => Value }
           end,
     maps:fold(Fun, Acc, Map);
 to_map([{KeyRaw, Value} | Rest], Map) ->
     Key = atom_key(KeyRaw),
-    Map2 = case is_proplist(Value) of
-               true -> Map#{ Key => to_map(Value, #{})};
-               _ -> Map#{ Key => Value }
-           end,
-    to_map(Rest, Map2).
+    to_map(Rest, Map#{ Key => list_to_map(Value) }).
+
+list_to_map(List) ->
+    case is_proplist(List) of
+        true -> to_map(List, #{});
+        _ -> List
+    end.
 
 render(RawTemplate) ->
     render(RawTemplate, #{}, #{}).
@@ -149,16 +151,10 @@ do_render([_ | Tail], Context, Acc) ->
 substitute(Lambda, Context, Escape) when is_function(Lambda, 0) ->
     Ast = compile(to_str(Lambda())),
     Value = do_render(Ast, Context, []),
-    case Escape of
-        true -> html_escape(Value, "");
-        _ -> Value
-    end;
+    escape(Value, Escape);
 substitute(RawValue, _, Escape) ->
     Value = to_str(RawValue),
-    case Escape of
-        true -> html_escape(Value, "");
-        _ -> Value
-    end.
+    escape(Value, Escape).
 
 render_section(AST, Context, Lambda)
   when is_function(Lambda, 1);
@@ -166,16 +162,7 @@ render_section(AST, Context, Lambda)
     Template = ast_to_template(AST),
     {StartTag, EndTag} = Context#context.delimiter,
     Options = #{ start_tag => StartTag, end_tag => EndTag },
-    NewTemplate = case is_function(Lambda, 1) of
-                      true -> Lambda(Template);
-                      _ ->
-                          NewContext = update_params_context(Context, Lambda),
-                          Renderer = fun (NewTemplate) ->
-                                             NewAST = compile(NewTemplate, Options),
-                                             do_render(NewAST, NewContext, [])
-                                     end,
-                          Lambda(Template, Renderer)
-                  end,
+    NewTemplate = get_lambda_template(Context, Template, Lambda, Options),
     ?REV(do_render(compile(NewTemplate, Options), Context, []));
 render_section(AST, Context, "") ->
     NewContext = update_params_context(Context, ""),
@@ -191,6 +178,19 @@ render_section(AST, Context, Value) ->
     NewContext = update_params_context(Context, Value),
     ?REV(do_render(AST, NewContext, [])).
 
+get_lambda_template(_, Template, Lambda, _)
+  when is_function(Lambda, 1) ->
+    Lambda(Template);
+get_lambda_template(Context, Template, Lambda, Options)
+  when is_function(Lambda, 2) ->
+    NewContext = update_params_context(Context, Lambda),
+    Renderer = fun (NewTemplate) ->
+                       NewAST = compile(NewTemplate, Options),
+                       do_render(NewAST, NewContext, [])
+               end,
+    Lambda(Template, Renderer).
+
+
 compile(Content) ->
     Options = #{ start_tag => "{{", end_tag => "}}" },
     compile(Content, Options).
@@ -198,8 +198,8 @@ compile(Content) ->
 compile(RawTemplate, Options) ->
     Template = unicode:characters_to_list(RawTemplate),
     Tokens = tokenize(Template, Options, null),
-    Cleaned_tokens = clean(Tokens),
-    {Ast, _, _} = ast(Cleaned_tokens, null, []),
+    CleanedTokens = clean(Tokens),
+    {Ast, _, _} = ast(CleanedTokens, null, []),
     Ast.
 
 compile_partials(RawPartials) ->
@@ -214,7 +214,8 @@ tokenize([], _, {LineAcc, Acc}) ->
 tokenize([$\n | Tail], Options, Acc) ->
     Acc2 = push_acc(new_line, Acc),
     tokenize(Tail, Options, Acc2);
-tokenize([${, ${, ${ | Tail] = Template, #{ start_tag := "{{" } = Options, Acc) ->
+tokenize([${, ${, ${ | Tail] = Template,
+         #{ start_tag := "{{" } = Options, Acc) ->
     case tag_tokenize(Template, #{ start_tag => "{{{", end_tag => "}}}" }) of
         {TagType, TagName, TagContent, Tail2} ->
             Acc2 = push_acc({TagType, TagName, TagContent}, Acc),
@@ -223,7 +224,8 @@ tokenize([${, ${, ${ | Tail] = Template, #{ start_tag := "{{" } = Options, Acc) 
             Acc2 = push_acc({string, "{{{"}, Acc),
             tokenize(Tail, Options, Acc2)
     end;
-tokenize([Letter | Tail] = Template, #{ start_tag := StartTag } = Options, Acc) ->
+tokenize([Letter | Tail] = Template,
+         #{ start_tag := StartTag } = Options, Acc) ->
     case start_with(Template, StartTag) of
         true ->
             case tag_tokenize(Template, Options) of
@@ -258,18 +260,18 @@ tag_tokenize(Template, #{ start_tag := Start, end_tag := End }) ->
                 _ -> error
             end;
         {TagContent, Tail} ->
+            FullTagContent = Start ++ TagContent ++ End,
             case parse_tag_name(TagContent) of
                 {TagType, TagName} ->
-                    {TagType, TagName, Start ++ TagContent ++ End, Tail};
+                    {TagType, TagName, FullTagContent, Tail};
                 TagName ->
-                    TagType = case Start of
-                                  "{{{" -> no_escape;
-                                  _ -> variable
-                              end,
-                    {TagType, TagName, Start ++ TagContent ++ End, Tail}
+                    {tag_type(Start), TagName, FullTagContent, Tail}
             end;
         _ -> missing_end_tag
     end.
+
+tag_type("{{{") -> no_escape;
+tag_type(_) -> variable.
 
 push_acc({string, Letters}, null) -> {[{string, ?REV(Letters)}], []};
 push_acc(new_line, null) -> {[], [new_line]};
