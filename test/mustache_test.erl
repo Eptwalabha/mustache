@@ -38,13 +38,6 @@ render_missing_end_delimiter_test() ->
     Map = #{ name => "Tom" },
     ?assertEqual("Hello {{name", mustache:render(Template, Map)).
 
-render_broken_tag_test() ->
-    Template = "I am become {{name}, the {{job}}",
-    Map = #{ name => "Death",
-             job => "destroyer of worlds" },
-    ?assertEqual("I am become {{name}, the destroyer of worlds",
-                 mustache:render(Template, Map)).
-
 render_type_test() ->
     Template = "{{atom}}, {{int}}, {{float}}, {{string}}, {{binary}}, {{bool}}",
     Map = #{ atom => atom,
@@ -77,13 +70,6 @@ render_missing_end_delimiter_escape_test() ->
     Template = "Hello {{{name",
     ?assertEqual("Hello {{{name",
                  mustache:render(Template, #{ name => "Tom" })).
-
-render_broken_escape_tag_test() ->
-    Template = "I am become {{{name}}, the {{{function}}}",
-    Map = #{ name => "Beethoven",
-             function => "destroyer of plants" },
-    ?assertEqual("I am become {{{name}}, the destroyer of plants",
-                 mustache:render(Template, Map)).
 
 render_does_not_escape_html_test() ->
     Template = "{{{html}}}",
@@ -234,14 +220,14 @@ render_inverted_section_test() ->
 
 render_partial_section_test() ->
     Template = "{{#names}}{{>test}}{{/names}}",
-    Map = #{ test => "my name is {{name}}\n",
-             names => [#{ name => "Huey" },
+    Partials = #{ "test" => "my name is {{name}}\n" },
+    Map = #{ names => [#{ name => "Huey" },
                        #{ name => "Dewey" },
                        #{ name => "Louie" }] },
     ?assertEqual("my name is Huey\n"
                  "my name is Dewey\n"
                  "my name is Louie\n",
-                 mustache:render(Template, Map)).
+                 mustache:render(Template, Map, Partials)).
 
 render_partial_section_not_defined_test() ->
     Template = "{{>does-not-exists}}",
