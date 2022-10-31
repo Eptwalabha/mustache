@@ -36,75 +36,99 @@
 basic_behavior_test() ->
     Template = <<"\"{{>text}}\"">>,
     Data = #{},
+    Partials = #{ text => <<"from partial">> },
     Expected = <<"\"from partial\"">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc The empty string should be used when the named partial is not found.
 failed_lookup_test() ->
     Template = <<"\"{{>text}}\"">>,
     Data = #{},
+    Partials = #{},
     Expected = <<"\"\"">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc The greater-than operator should operate within the current context.
 context_test() ->
     Template = <<"\"{{>partial}}\"">>,
     Data = #{text => <<"content">>},
+    Partials = #{ partial => <<"*{{text}}*">> },
     Expected = <<"\"*content*\"">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc The greater-than operator should properly recurse.
 recursion_test() ->
     Template = <<"{{>node}}">>,
-    Data = #{content => <<"X">>,nodes => [#{content => <<"Y">>,nodes => []}]},
+    Data = #{ content => <<"X">>,
+              nodes => [#{ content => <<"Y">>,
+                           nodes => [] }]},
+    Partials = #{ node => <<"{{content}}<{{#nodes}}{{>node}}{{/nodes}}>">> },
     Expected = <<"X<Y<>>">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc The greater-than operator should not alter surrounding whitespace.
 surrounding_whitespace_test() ->
     Template = <<"| {{>partial}} |">>,
     Data = #{},
+    Partials = #{ partial => <<"\t|\t">> },
     Expected = <<"| \t|\t |">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc Whitespace should be left untouched.
 inline_indentation_test() ->
     Template = <<"  {{data}}  {{> partial}}\n">>,
     Data = #{data => <<"|">>},
+    Partials = #{ partial => <<">\n>">> },
     Expected = <<"  |  >\n>\n">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc "\r\n" should be considered a newline for standalone tags.
 standalone_line_endings_test() ->
     Template = <<"|\r\n{{>partial}}\r\n|">>,
     Data = #{},
+    Partials = #{ partial => <<">">> },
     Expected = <<"|\r\n>|">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc Standalone tags should not require a newline to precede them.
 standalone_without_previous_line_test() ->
     Template = <<"  {{>partial}}\n>">>,
     Data = #{},
+    Partials = #{ partial => <<">\n>">> },
     Expected = <<"  >\n  >>">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc Standalone tags should not require a newline to follow them.
 standalone_without_newline_test() ->
     Template = <<">\n  {{>partial}}">>,
     Data = #{},
+    Partials = #{ partial => <<">\n>">> },
     Expected = <<">\n  >\n  >">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc Each line of the partial should be indented before rendering.
 standalone_indentation_test() ->
     Template = <<"\\\n {{>partial}}\n/\n">>,
     Data = #{content => <<"<\n->">>},
+    Partials = #{ partial => <<"|\n{{{content}}}\n|\n">> },
     Expected = <<"\\\n |\n <\n->\n |\n/\n">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).
 
 %% @doc Superfluous in-tag whitespace should be ignored.
 padding_whitespace_test() ->
     Template = <<"|{{> partial }}|">>,
     Data = #{boolean => true},
+    Partials = #{ partial => <<"[]">> },
     Expected = <<"|[]|">>,
-    ?assertEqual(?TO_LIST(Expected), mustache:render(Template, Data)).
+    ?assertEqual(?TO_LIST(Expected),
+                 mustache:render(Template, Data, Partials)).

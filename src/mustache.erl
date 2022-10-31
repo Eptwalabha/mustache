@@ -35,6 +35,12 @@ val(Key, #context{ params = Map}) when is_map(Map) ->
     KeyParts = key_to_parts(Key),
     fetch(KeyParts, Map, "").
 
+% @TODO fetch partial from file if not found
+get_partial(RawKey, #context{ partials = Partials })
+  when is_map(Partials) ->
+    Key = to_atom(RawKey),
+    maps:get(Key, Partials, not_found).
+
 key_to_parts(".") -> ['.'];
 key_to_parts(Other) ->
     Key = string:trim(unicode:characters_to_list(Other)),
@@ -111,15 +117,22 @@ render(RawTemplate, Params) ->
     render(RawTemplate, Params, #{}).
 
 render(RawTemplate, Params, RawPartials) ->
-    _Partials = compile_partials(RawPartials),
     AST = compile(RawTemplate),
     Context = #context{ params = to_map(Params),
-                        partials = compile_partials(RawPartials) },
+                        partials = prepare_partials(RawPartials) },
     do_render(AST, Context, "").
 
 do_render([], _, Acc) -> ?FLAT(?REV(Acc));
 do_render([{delimiter, _, NewDelimiter, _} | Tail], Context, Acc) ->
     do_render(Tail, Context#context{ delimiter = NewDelimiter }, Acc);
+do_render([{partial, Key, _} | Tail], Context, Acc) ->
+    case get_partial(Key, Context) of
+        not_found -> do_render(Tail, Context, Acc);
+        Partial ->
+            AST = compile(Partial),
+            RenderedPartial = do_render(AST, Context, []),
+            do_render(Tail, Context, [RenderedPartial | Acc])
+    end;
 do_render([new_line | Tail], Context, Acc) ->
     do_render(Tail, Context, [$\n | Acc]);
 do_render([{SectionType, Key, SectionAST, _} | Tail], Context, Acc)
@@ -144,9 +157,7 @@ do_render([{SubstitutionType, Key, _} | Tail], Context, Acc)
             do_render(Tail, Context, [Value2 | Acc])
     end;
 do_render([List | Tail], Context, Acc) when is_list(List) ->
-    do_render(Tail, Context, [List | Acc]);
-do_render([_ | Tail], Context, Acc) ->
-    do_render(Tail, Context, Acc).
+    do_render(Tail, Context, [List | Acc]).
 
 substitute(Lambda, Context, Escape) when is_function(Lambda, 0) ->
     Ast = compile(to_str(Lambda())),
@@ -202,12 +213,14 @@ compile(RawTemplate, Options) ->
     {Ast, _, _} = ast(CleanedTokens, null, []),
     Ast.
 
-compile_partials(RawPartials) ->
-    Fun = fun (PartialName, RawPatial, Acc) ->
-                  Acc#{ PartialName => compile(RawPatial) }
+prepare_partials(RawPartials) ->
+    Fun = fun (RawKey, RawPartial, MapAcc) ->
+                  Key = to_atom(RawKey),
+                  MapAcc#{Key => unicode:characters_to_list(RawPartial)}
           end,
     maps:fold(Fun, #{}, RawPartials).
 
+tokenize([], _, null) -> "";
 tokenize([], _, {[], Acc}) -> ?REV(Acc);
 tokenize([], _, {LineAcc, Acc}) ->
     ?REV([?REV(commit_line(LineAcc)) | Acc]);
@@ -325,6 +338,7 @@ clean_tokens(Line) ->
         [{section, _, _} = Section] -> [Section];
         [{inverted, _, _} = Section] -> [Section];
         [{end_section, _, _} = Section] -> [Section];
+        [{partial, _, _} = Partial] -> [Partial];
         _ -> Line
     end.
 
@@ -384,3 +398,5 @@ is_proplist(List) when is_list(List) ->
 is_proplist(_) ->
     false.
 
+to_atom(Atom) when is_atom(Atom) -> Atom;
+to_atom(List) when is_list(List) -> list_to_atom(List).

@@ -3,6 +3,9 @@
 -include_lib("eunit/include/eunit.hrl").
 
 
+render_empty_template_test() ->
+    ?assertEqual("", mustache:render("")).
+
 render_test() ->
     ?assertEqual("", mustache:render("{{mustache}}")).
 
