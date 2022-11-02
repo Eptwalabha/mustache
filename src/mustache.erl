@@ -27,7 +27,11 @@ parse_tag_name([$! | Comment]) -> {comment, string:trim(Comment)};
 parse_tag_name([$# | Tag]) -> {section, string:trim(Tag)};
 parse_tag_name([$^ | Tag]) -> {inverted, string:trim(Tag)};
 parse_tag_name([$& | Tag]) -> {no_escape, string:trim(Tag)};
-parse_tag_name([$> | Tag]) -> {partial, string:trim(Tag)};
+parse_tag_name([$> | Tag]) ->
+    case string:trim(Tag) of
+        [$* | TagName] -> {dynamic, string:trim(TagName)};
+        TagName -> {partial, TagName}
+    end;
 parse_tag_name([$/ | Tag]) -> {end_section, string:trim(Tag)};
 parse_tag_name(Tag) -> string:trim(Tag).
 
@@ -126,11 +130,14 @@ do_render([], _, Acc) -> ?FLAT(?REV(Acc));
 do_render([{delimiter, _, NewDelimiter, _} | Tail], Context, Acc) ->
     do_render(Tail, Context#context{ delimiter = NewDelimiter }, Acc);
 do_render([{partial, Key, _} | Tail], Context, Acc) ->
-    case get_partial(Key, Context) of
-        not_found -> do_render(Tail, Context, Acc);
-        Partial ->
-            AST = compile(Partial),
-            RenderedPartial = do_render(AST, Context, []),
+    RenderedPartial = render_partial(Key, Context),
+    do_render(Tail, Context, [RenderedPartial | Acc]);
+do_render([{dynamic, Key, _} | Tail], Context, Acc) ->
+    case val(Key, Context) of
+        "" -> do_render(Tail, Context, Acc);
+        RawPartialKey ->
+            PartialKey = to_atom(RawPartialKey),
+            RenderedPartial = render_partial(PartialKey, Context),
             do_render(Tail, Context, [RenderedPartial | Acc])
     end;
 do_render([new_line | Tail], Context, Acc) ->
@@ -166,6 +173,14 @@ substitute(Lambda, Context, Escape) when is_function(Lambda, 0) ->
 substitute(RawValue, _, Escape) ->
     Value = to_str(RawValue),
     escape(Value, Escape).
+
+render_partial(PartialKey, Context) ->
+    case get_partial(PartialKey, Context) of
+        not_found -> "";
+        Partial ->
+            AST = compile(Partial),
+            do_render(AST, Context, [])
+    end.
 
 render_section(AST, Context, Lambda)
   when is_function(Lambda, 1);
@@ -339,6 +354,7 @@ clean_tokens(Line) ->
         [{inverted, _, _} = Section] -> [Section];
         [{end_section, _, _} = Section] -> [Section];
         [{partial, _, _} = Partial] -> [Partial];
+        [{dynamic, _, _} = Partial] -> [Partial];
         _ -> Line
     end.
 
@@ -399,4 +415,5 @@ is_proplist(_) ->
     false.
 
 to_atom(Atom) when is_atom(Atom) -> Atom;
-to_atom(List) when is_list(List) -> list_to_atom(List).
+to_atom(List) when is_list(List) -> list_to_atom(List);
+to_atom(Binary) when is_binary(Binary) -> to_atom(binary_to_list(Binary)).
