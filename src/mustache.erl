@@ -242,9 +242,8 @@ tokenize([], _, {LineAcc, Acc}) ->
 tokenize([$\n | Tail], Options, Acc) ->
     Acc2 = push_acc(new_line, Acc),
     tokenize(Tail, Options, Acc2);
-tokenize([${, ${, ${ | Tail] = Template,
-         #{ start_tag := "{{" } = Options, Acc) ->
-    case tag_tokenize(Template, #{ start_tag => "{{{", end_tag => "}}}" }) of
+tokenize([${, ${, ${ | Tail], #{ start_tag := "{{" } = Options, Acc) ->
+    case tag_tokenize(Tail, #{ start_tag => "{{{", end_tag => "}}}" }) of
         {TagType, TagName, TagContent, Tail2} ->
             Acc2 = push_acc({TagType, TagName, TagContent}, Acc),
             tokenize(Tail2, Options, Acc2);
@@ -255,8 +254,8 @@ tokenize([${, ${, ${ | Tail] = Template,
 tokenize([Letter | Tail] = Template,
          #{ start_tag := StartTag } = Options, Acc) ->
     case start_with(Template, StartTag) of
-        true ->
-            case tag_tokenize(Template, Options) of
+        {true, TagTail} ->
+            case tag_tokenize(TagTail, Options) of
                 error ->
                     Acc2 = push_acc({string, [Letter]}, Acc),
                     tokenize(Tail, Options, Acc2);
@@ -278,7 +277,7 @@ tokenize([Letter | Tail] = Template,
     end.
 
 tag_tokenize(Template, #{ start_tag := Start, end_tag := End }) ->
-    case parse_tag(Template, {Start, End}) of
+    case fetch_tag_content(Template, End, "") of
         missing_end_tag -> error;
         {[$= | _] = TagContent, Tail} ->
             case string:lexemes(string:trim(TagContent, both, "="), " \n\t") of
@@ -294,8 +293,7 @@ tag_tokenize(Template, #{ start_tag := Start, end_tag := End }) ->
                     {TagType, TagName, FullTagContent, Tail};
                 TagName ->
                     {tag_type(Start), TagName, FullTagContent, Tail}
-            end;
-        _ -> missing_end_tag
+            end
     end.
 
 tag_type("{{{") -> no_escape;
@@ -320,26 +318,17 @@ commit_line([{string, RevString} | Acc]) ->
     end;
 commit_line(Acc) -> Acc.
 
-start_with(_, []) -> true;
-start_with([A | Tail], [A | Tail2]) -> start_with(Tail, Tail2);
+start_with(Tail, []) -> {true, Tail};
+start_with([Same | Tail], [Same | Tail2]) -> start_with(Tail, Tail2);
 start_with(_, _) -> false.
 
-parse_tag([A | Tail], {[A], EndTag}) ->
-    parse_tag(Tail, EndTag, "");
-parse_tag([A, B | Tail], {[A, B], EndTag}) ->
-    parse_tag(Tail, EndTag, "");
-parse_tag([A, B, C | Tail], {[A, B, C], EndTag}) ->
-    parse_tag(Tail, EndTag, "");
-parse_tag(_, _) -> missmatch_start_tag.
-
-parse_tag([A | Tail], [A], Acc) -> {?REV(Acc), Tail};
-parse_tag([A, B | Tail], [A, B], Acc) -> {?REV(Acc), Tail};
-parse_tag([A, B, C | Tail], [A, B, C], Acc) -> {?REV(Acc), Tail};
-parse_tag([_], [_], _) -> missing_end_tag;
-parse_tag([_, _], [_, _], _) -> missing_end_tag;
-parse_tag([_, _, _], [_, _, _], _) -> missing_end_tag;
-parse_tag([L | Tail], EndTag, Acc) ->
-    parse_tag(Tail, EndTag, [L | Acc]).
+fetch_tag_content([], _, _) ->
+    missing_end_tag;
+fetch_tag_content([Letter | Tail] = TagContent, EndTag, Acc) ->
+    case start_with(TagContent, EndTag) of
+        {true, Tail2} -> {?REV(Acc), Tail2};
+        _ -> fetch_tag_content(Tail, EndTag, [Letter | Acc])
+    end.
 
 clean(Lines) ->
     lists:flatmap(fun clean_tokens/1, Lines).
