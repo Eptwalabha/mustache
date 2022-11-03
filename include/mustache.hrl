@@ -1,0 +1,2 @@
+-define(FLAT(List), lists:flatten(List)).
+-define(REV(List), lists:reverse(List)).

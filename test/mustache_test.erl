@@ -33,11 +33,6 @@ render_all_variables_test() ->
     Map = #{ var1 => "toto", var2 => "tata"},
     ?assertEqual("toto tata  toto", mustache:render(Template, Map)).
 
-render_missing_end_delimiter_test() ->
-    Template = "Hello {{name",
-    Map = #{ name => "Tom" },
-    ?assertEqual("Hello {{name", mustache:render(Template, Map)).
-
 render_type_test() ->
     Template = "{{atom}}, {{int}}, {{float}}, {{string}}, {{binary}}, {{bool}}",
     Map = #{ atom => atom,
@@ -65,11 +60,6 @@ render_escape_html_test() ->
                  mustache:render(Template, #{ injection => "&\"'" })),
     ?assertEqual("",
                  mustache:render(Template, #{ injection => null })).
-
-render_missing_end_delimiter_escape_test() ->
-    Template = "Hello {{{name",
-    ?assertEqual("Hello {{{name",
-                 mustache:render(Template, #{ name => "Tom" })).
 
 render_does_not_escape_html_test() ->
     Template = "{{{html}}}",
@@ -202,8 +192,8 @@ render_section_with_no_endtag_test() ->
     Template = "Dwarves: {{#dwarves}}{{.}},",
     Map = #{ dwarves => ["Doc", "Happy", "Bashful", "Grumpy",
                          "Sleepy", "Sneezy", "Dopey"] },
-    Expected = "Dwarves: Doc,Happy,Bashful,Grumpy,Sleepy,Sneezy,Dopey,",
-    ?assertEqual(Expected, mustache:render(Template, Map)).
+    Expected = {missing_end_section, "dwarves"},
+    ?assertError(Expected, mustache:render(Template, Map)).
 
 render_ignore_comments_test() ->
     Template = "Hello {{! ignore me}}world{{!ignore}}",

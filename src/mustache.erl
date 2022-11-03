@@ -4,8 +4,7 @@
 -export([compile/1]).
 -export([main/1]).
 
--define(REV(L), lists:reverse(L)).
--define(FLAT(L), lists:flatten(L)).
+-include("mustache.hrl").
 
 -record(context, { params = #{},
                    partials = #{},
@@ -14,26 +13,18 @@
 main([Template | _]) ->
     io:fwrite("~ts~n", [render(Template)]).
 
-is_empty_or_false(Value) ->
-    lists:member(Value, [<<"">>, [], false, null]).
+is_empty_or_false(<<"">>) -> true;
+is_empty_or_false([]) -> true;
+is_empty_or_false(false) -> true;
+is_empty_or_false(null) -> true;
+is_empty_or_false(0) -> true;
+is_empty_or_false(_) -> false.
 
 update_params_context(#context{ params = Map } = Context, Map2)
   when is_map(Map), is_map(Map2) ->
     Context#context{ params = maps:merge(Map, Map2) };
 update_params_context(#context{ params = Map } = Context, Item) ->
     Context#context{ params = maps:merge(Map, #{ '.' => Item }) }.
-
-parse_tag_name([$! | Comment]) -> {comment, string:trim(Comment)};
-parse_tag_name([$# | Tag]) -> {section, string:trim(Tag)};
-parse_tag_name([$^ | Tag]) -> {inverted, string:trim(Tag)};
-parse_tag_name([$& | Tag]) -> {no_escape, string:trim(Tag)};
-parse_tag_name([$> | Tag]) ->
-    case string:trim(Tag) of
-        [$* | TagName] -> {dynamic, string:trim(TagName)};
-        TagName -> {partial, TagName}
-    end;
-parse_tag_name([$/ | Tag]) -> {end_section, string:trim(Tag)};
-parse_tag_name(Tag) -> string:trim(Tag).
 
 val(Key, #context{ params = Map}) when is_map(Map) ->
     KeyParts = key_to_parts(Key),
@@ -185,7 +176,7 @@ render_partial(PartialKey, Context) ->
 render_section(AST, Context, Lambda)
   when is_function(Lambda, 1);
        is_function(Lambda, 2) ->
-    Template = ast_to_template(AST),
+    Template = mustache_ast:ast_to_template(AST),
     {StartTag, EndTag} = Context#context.delimiter,
     Options = #{ start_tag => StartTag, end_tag => EndTag },
     NewTemplate = get_lambda_template(Context, Template, Lambda, Options),
@@ -223,10 +214,8 @@ compile(Content) ->
 
 compile(RawTemplate, Options) ->
     Template = unicode:characters_to_list(RawTemplate),
-    Tokens = tokenize(Template, Options, null),
-    CleanedTokens = clean(Tokens),
-    {Ast, _, _} = ast(CleanedTokens, null, []),
-    Ast.
+    Tokens = mustache_scan:tokens(Template, Options),
+    mustache_ast:build(Tokens).
 
 prepare_partials(RawPartials) ->
     Fun = fun (RawKey, RawPartial, MapAcc) ->
@@ -234,169 +223,6 @@ prepare_partials(RawPartials) ->
                   MapAcc#{Key => unicode:characters_to_list(RawPartial)}
           end,
     maps:fold(Fun, #{}, RawPartials).
-
-tokenize([], _, null) -> "";
-tokenize([], _, {[], Acc}) -> ?REV(Acc);
-tokenize([], _, {LineAcc, Acc}) ->
-    ?REV([?REV(commit_line(LineAcc)) | Acc]);
-tokenize([$\n | Tail], Options, Acc) ->
-    Acc2 = push_acc(new_line, Acc),
-    tokenize(Tail, Options, Acc2);
-tokenize([${, ${, ${ | Tail], #{ start_tag := "{{" } = Options, Acc) ->
-    case tag_tokenize(Tail, #{ start_tag => "{{{", end_tag => "}}}" }) of
-        {TagType, TagName, TagContent, Tail2} ->
-            Acc2 = push_acc({TagType, TagName, TagContent}, Acc),
-            tokenize(Tail2, Options, Acc2);
-        error ->
-            Acc2 = push_acc({string, "{{{"}, Acc),
-            tokenize(Tail, Options, Acc2)
-    end;
-tokenize([Letter | Tail] = Template,
-         #{ start_tag := StartTag } = Options, Acc) ->
-    case start_with(Template, StartTag) of
-        {true, TagTail} ->
-            case tag_tokenize(TagTail, Options) of
-                error ->
-                    Acc2 = push_acc({string, [Letter]}, Acc),
-                    tokenize(Tail, Options, Acc2);
-                {delimiter, {NewStartTag, NewEndTag}, TagContent, Tail2} ->
-                    #{ start_tag := StartTag, end_tag := EndTag } = Options,
-                    TagInfos = {delimiter, {StartTag, EndTag},
-                                {NewStartTag, NewEndTag}, TagContent},
-                    Acc2 = push_acc(TagInfos, Acc),
-                    Options2 = Options#{ start_tag => NewStartTag,
-                                         end_tag => NewEndTag },
-                    tokenize(Tail2, Options2, Acc2);
-                {TagType, TagName, TagContent, Tail2} ->
-                    Acc2 = push_acc({TagType, TagName, TagContent}, Acc),
-                    tokenize(Tail2, Options, Acc2)
-            end;
-        _ ->
-            Acc2 = push_acc({string, [Letter]}, Acc),
-            tokenize(Tail, Options, Acc2)
-    end.
-
-tag_tokenize(Template, #{ start_tag := Start, end_tag := End }) ->
-    case fetch_tag_content(Template, End, "") of
-        missing_end_tag -> error;
-        {[$= | _] = TagContent, Tail} ->
-            case string:lexemes(string:trim(TagContent, both, "="), " \n\t") of
-                [NewStartTag, NewEndTag] ->
-                    {delimiter, {NewStartTag, NewEndTag},
-                     Start ++ TagContent ++ End, Tail};
-                _ -> error
-            end;
-        {TagContent, Tail} ->
-            FullTagContent = Start ++ TagContent ++ End,
-            case parse_tag_name(TagContent) of
-                {TagType, TagName} ->
-                    {TagType, TagName, FullTagContent, Tail};
-                TagName ->
-                    {tag_type(Start), TagName, FullTagContent, Tail}
-            end
-    end.
-
-tag_type("{{{") -> no_escape;
-tag_type(_) -> variable.
-
-push_acc({string, Letters}, null) -> {[{string, ?REV(Letters)}], []};
-push_acc(new_line, null) -> {[], [new_line]};
-push_acc(Other, null) -> {[Other], []};
-push_acc(new_line, {LineAcc, Acc}) ->
-    Line = [new_line | commit_line(LineAcc)],
-    {[], [?REV(Line) | Acc]};
-push_acc({string, Letters}, {[{string, String} | LineAcc], Acc}) ->
-    {[{string, ?REV(Letters) ++ String} | LineAcc], Acc};
-push_acc(Other, {LineAcc, Acc}) ->
-    {[Other | commit_line(LineAcc)], Acc}.
-
-commit_line([{string, RevString} | Acc]) ->
-    String = ?REV(RevString),
-    case string:trim(String) of
-        "" -> [{blank, String} | Acc];
-        _ -> [{string, String} | Acc]
-    end;
-commit_line(Acc) -> Acc.
-
-start_with(Tail, []) -> {true, Tail};
-start_with([Same | Tail], [Same | Tail2]) -> start_with(Tail, Tail2);
-start_with(_, _) -> false.
-
-fetch_tag_content([], _, _) ->
-    missing_end_tag;
-fetch_tag_content([Letter | Tail] = TagContent, EndTag, Acc) ->
-    case start_with(TagContent, EndTag) of
-        {true, Tail2} -> {?REV(Acc), Tail2};
-        _ -> fetch_tag_content(Tail, EndTag, [Letter | Acc])
-    end.
-
-clean(Lines) ->
-    lists:flatmap(fun clean_tokens/1, Lines).
-
-clean_tokens([new_line]) -> [new_line];
-clean_tokens(new_line) -> [new_line];
-clean_tokens(Line) ->
-    case trim(Line) of
-        [] -> [];
-        [{delimiter, _, _, _} = Delimiter] -> [Delimiter];
-        [{section, _, _} = Section] -> [Section];
-        [{inverted, _, _} = Section] -> [Section];
-        [{end_section, _, _} = Section] -> [Section];
-        [{partial, _, _} = Partial] -> [Partial];
-        [{dynamic, _, _} = Partial] -> [Partial];
-        _ -> Line
-    end.
-
-trim(Tokens) ->
-    Tokens2 = trim_tokens(Tokens),
-    ?REV(trim_tokens(?REV(Tokens2))).
-
-trim_tokens([]) -> [];
-trim_tokens([{blank, _} | Tokens]) -> trim_tokens(Tokens);
-trim_tokens([{comment, _, _} | Tokens]) -> trim_tokens(Tokens);
-trim_tokens([new_line | Tokens]) -> trim_tokens(Tokens);
-trim_tokens(Tokens) -> Tokens.
-
-ast([], _, Acc) -> {?REV(Acc), "", []};
-ast([{end_section, SectionName, I} | Tail], SectionName, Acc) ->
-    {?REV(Acc), I, Tail};
-ast([{Section, SubSectionName, StartTag} | Tail], SectionName, Acc)
-  when Section =:= section;
-       Section =:= inverted ->
-    {SubSectionAst, EndTag, Tail2} = ast(Tail, SubSectionName, []),
-    Item = {Section, SubSectionName, SubSectionAst, {StartTag, EndTag}},
-    ast(Tail2, SectionName, [Item | Acc]);
-ast([Item | Tail], SectionName, Acc) ->
-    ast(Tail, SectionName, process_item(Item, Acc)).
-
-process_item({string, String}, Acc) -> [String | Acc];
-process_item({blank, String}, Acc) -> [String | Acc];
-process_item({comment, _, _}, Acc) -> Acc;
-process_item(Other, Acc) -> [Other | Acc].
-
-ast_to_template(List) ->
-    ?FLAT(ast_to_template(List, "")).
-
-ast_to_template([], Acc) -> ?REV(Acc);
-ast_to_template([{Section, _, Ast, {Open, Close}} | Tail], Acc)
-  when Section =:= section;
-       Section =:= inverted ->
-    Template = [Open, ast_to_template(Ast, []), Close],
-    ast_to_template(Tail, [?REV(Template) | Acc]);
-ast_to_template([{_, _, Txt} | Tail], Acc) ->
-    ast_to_template(Tail, [Txt | Acc]);
-ast_to_template([new_line | Tail], Acc) ->
-    ast_to_template(Tail, [$\n | Acc]);
-ast_to_template([List | Tail], Acc) when is_list(List) ->
-    case is_string(List) of
-        true -> ast_to_template(Tail, [List | Acc]);
-        _ ->
-            Txt = lists:map(fun ast_to_template/1, List),
-            ast_to_template(Tail, [Txt | Acc])
-    end.
-
-is_string(List) when is_list(List) ->
-    lists:all(fun (X) -> is_integer(X) end, ?FLAT(List)).
 
 is_proplist(List) when is_list(List) ->
     lists:all(fun ({_, _}) -> true; (_) -> false end, List);
