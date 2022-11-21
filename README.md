@@ -1,7 +1,7 @@
 # mustache
 
 [![Erlang CI](https://github.com/Eptwalabha/mustache/actions/workflows/erlang.yml/badge.svg)](https://github.com/Eptwalabha/mustache/actions/workflows/erlang.yml)  
-Current version: `v0.0.1`
+Current version: `v0.2.0`
 
 A library to render [Mustach](https://mustache.github.io/) templates.  
 It complies with the [Mustache's manual](https://mustache.github.io/mustache.5.html) and [specs](#specs).
@@ -74,15 +74,14 @@ This library complies with the following specs:
 
 - [x] comments
 - [x] delimiters
-- [x] dynamic-names \*
+- [x] dynamic-names
 - [ ] inheritance
 - [x] interpolation
 - [x] inverted
 - [x] lambdas
-- [x] partials \*
+- [x] partials
 - [x] sections
 
-\* : does not pad partials with spaces as requiered by the spec 
 ## Copyright
 
 This repo is under the MIT's license
