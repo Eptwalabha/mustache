@@ -1,106 +1,40 @@
 -module(mustache).
 
--export([render/1, render/2]).
+-export([render/1, render/2, render/3]).
+-export([compile/1]).
 -export([main/1]).
 
--define(REV(L), lists:reverse(L)).
--define(FLAT(L), lists:flatten(L)).
+-include_lib("../include/mustache.hrl").
+
+-record(context, { params = #{},
+                   partials = #{},
+                   delimiter = { "{{", "}}" } }).
 
 main([Template | _]) ->
     io:fwrite("~ts~n", [render(Template)]).
 
-render(Template) ->
-    render(Template, []).
+is_empty_or_false(<<"">>) -> true;
+is_empty_or_false([]) -> true;
+is_empty_or_false(false) -> true;
+is_empty_or_false(null) -> true;
+is_empty_or_false(0) -> true;
+is_empty_or_false(_) -> false.
 
-render(Template, Params) ->
-    render(unicode:characters_to_list(Template), to_map(Params), "").
-
-render([], _, Acc) -> ?FLAT(?REV(Acc));
-render([${, ${, ${ | Tail], Params, Acc) ->
-    case fetch_tag_content(Tail, "}}}") of
-        end_delimiter_error ->
-            render(Tail, Params, [${, ${, ${ | Acc]);
-        {Key, Tail2} ->
-            Value = to_str(val(Key, Params)),
-            render(Tail2, Params, [Value | Acc])
-    end;
-render([${, ${ | Tail], Params, Acc) ->
-    case fetch_tag_content(Tail, "}}") of
-        end_delimiter_error ->
-            render(Tail, Params, [${, ${ | Acc]);
-        {[$! | _], Tail2} ->
-            render(Tail2, Params, Acc);
-        {[Char | Key], Tail2} when Char =:= $#; Char =:= $^ ->
-            {Section, Tail3} = fetch_section(Tail2, Key),
-            Value = val(Key, Params),
-            Rendered = case can_render(Value, is_inverted(Char)) of
-                           true -> render_section(Section, Params, Value);
-                           _ -> ""
-                       end,
-            render(Tail3, Params, [Rendered | Acc]);
-        {[$> | Key], Tail2} ->
-            Partial = val(Key, Params),
-            Value = render(Partial, Params),
-            render(Tail2, Params, [Value | Acc]);
-        {[$& | Key], Tail2} ->
-            Value = to_str(val(Key, Params)),
-            render(Tail2, Params, [Value, Acc]);
-        {Key, Tail2} ->
-            Value = to_str(val(Key, Params)),
-            render(Tail2, Params, [html_escape(Value, "") | Acc])
-    end;
-render([Letter | Tail], Params, Acc) ->
-    render(Tail, Params, [Letter | Acc]).
-
-is_inverted($^) -> true;
-is_inverted(_) -> false.
-
-can_render(Value, IsInverted) ->
-    is_empty_or_false(Value) =:= IsInverted.
-
-is_empty_or_false(Value) ->
-    Value =:= [] orelse Value =:= false orelse Value =:= null.
-
-render_section(Template, Params, "") ->
-    render(Template, Params);
-render_section(Template, Params, Lambda)
-  when is_function(Lambda, 2) ->
-    Render = fun (NewTemplate) -> render(NewTemplate, Params) end,
-    render(Lambda(Template, Render), Params);
-render_section(Template, Params, Value)
-  when is_list(Value) ->
-    Fun = fun (Item) ->
-                  NewParams = update_params_context(Params, Item),
-                  render(Template, NewParams)
-          end,
-    lists:map(Fun, Value);
-render_section(Template, Params, Value) ->
-    NewParams = update_params_context(Params, Value),
-    render(Template, NewParams).
-
-update_params_context(Map, Map2)
+update_params_context(#context{ params = Map } = Context, Map2)
   when is_map(Map), is_map(Map2) ->
-    maps:merge(Map, Map2);
-update_params_context(Map, Item) ->
-    maps:merge(Map, #{ '.' => Item }).
+    Context#context{ params = maps:merge(Map, Map2) };
+update_params_context(#context{ params = Map } = Context, Item) ->
+    Context#context{ params = maps:merge(Map, #{ '.' => Item }) }.
 
-fetch_tag_content(Content, Endtag) ->
-    fetch_tag_content(Content, Endtag, "").
-
-fetch_tag_content([], _, _) ->
-    end_delimiter_error;
-fetch_tag_content([A, B, C | Tail], [A, B, C], Acc) ->
-    {string:trim(?REV(Acc)), Tail};
-fetch_tag_content([A, B | Tail], [A, B], Acc) ->
-    {string:trim(?REV(Acc)), Tail};
-fetch_tag_content([$} | _], _, _) ->
-    end_delimiter_error;
-fetch_tag_content([Letter | Tail], Endtag, Acc) ->
-    fetch_tag_content(Tail, Endtag, [Letter | Acc]).
-
-val(Key, Map) when is_map(Map) ->
+val(Key, #context{ params = Map}) when is_map(Map) ->
     KeyParts = key_to_parts(Key),
     fetch(KeyParts, Map, "").
+
+% @TODO fetch partial from file if not found
+get_partial(RawKey, #context{ partials = Partials })
+  when is_map(Partials) ->
+    Key = to_atom(RawKey),
+    maps:get(Key, Partials, not_found).
 
 key_to_parts(".") -> ['.'];
 key_to_parts(Other) ->
@@ -123,7 +57,6 @@ to_str(Int) when is_integer(Int) ->
     integer_to_list(Int);
 to_str(Float) when is_float(Float) ->
     io_lib:format("~p", [Float]);
-to_str(null) -> "";
 to_str(Atom) when is_atom(Atom) ->
     atom_to_list(Atom);
 to_str(Binary) when is_binary(Binary) ->
@@ -131,33 +64,188 @@ to_str(Binary) when is_binary(Binary) ->
 to_str(String) when is_list(String) ->
     String.
 
-html_escape([], Acc) -> ?REV(Acc);
-html_escape([$< | Tail], Acc) -> html_escape(Tail, ["&lt;" | Acc]);
-html_escape([$> | Tail], Acc) -> html_escape(Tail, ["&gt;" | Acc]);
-html_escape([$" | Tail], Acc) -> html_escape(Tail, ["&quot;" | Acc]);
-html_escape([$' | Tail], Acc) -> html_escape(Tail, ["&apos;" | Acc]);
-html_escape([$& | Tail], Acc) -> html_escape(Tail, ["&amp;" | Acc]);
-html_escape([Char | Tail], Acc) -> html_escape(Tail, [Char | Acc]).
+escape(Value, true) -> do_escape(Value, "");
+escape(Value, _) -> Value.
 
-fetch_section(Template, Endtag) ->
-    ReOptions = [unicode, {return, list}],
-    [Section | Tail] = re:split(Template, "{{/" ++ Endtag ++ "}}", ReOptions),
-    {Section, ?FLAT(Tail)}.
+do_escape([], Acc) -> ?REV(Acc);
+do_escape([$< | Tail], Acc) -> do_escape(Tail, ["&lt;" | Acc]);
+do_escape([$> | Tail], Acc) -> do_escape(Tail, ["&gt;" | Acc]);
+do_escape([$" | Tail], Acc) -> do_escape(Tail, ["&quot;" | Acc]);
+do_escape([$' | Tail], Acc) -> do_escape(Tail, ["&apos;" | Acc]);
+do_escape([$& | Tail], Acc) -> do_escape(Tail, ["&amp;" | Acc]);
+do_escape([Char | Tail], Acc) -> do_escape(Tail, [Char | Acc]).
 
-to_map(Map) when is_map(Map) -> Map;
-to_map(Proplist) ->
-    to_map(Proplist, #{}).
+to_map(Map) when is_map(Map) ->
+    to_map(Map, #{});
+to_map(List) when is_list(List) ->
+    case is_proplist(List) of
+        true -> to_map(List, #{});
+        _ -> #{ '.' => List }
+    end;
+to_map(Other) ->
+    #{ '.' => Other }.
 
 to_map([], Map) -> Map;
+to_map(Map, Acc) when is_map(Map) ->
+    Fun = fun (Key, Value, MapAcc) when is_map(Value) ->
+                  MapAcc#{ Key => to_map(Value, #{}) };
+              (Key, [_ | _] = List, MapAcc) when is_list(List) ->
+                  MapAcc#{ Key => list_to_map(List) };
+              (Key, Value, MapAcc) ->
+                  MapAcc#{ Key => Value }
+          end,
+    maps:fold(Fun, Acc, Map);
 to_map([{KeyRaw, Value} | Rest], Map) ->
     Key = atom_key(KeyRaw),
-    Map2 = case is_proplist(Value) of
-               true -> Map#{ Key => to_map(Value, #{})};
-               _ -> Map#{ Key => Value }
-           end,
-    to_map(Rest, Map2).
+    to_map(Rest, Map#{ Key => list_to_map(Value) }).
+
+list_to_map(List) ->
+    case is_proplist(List) of
+        true -> to_map(List, #{});
+        _ -> List
+    end.
+
+render(RawTemplate) ->
+    render(RawTemplate, #{}, #{}).
+
+render(RawTemplate, Params) ->
+    render(RawTemplate, Params, #{}).
+
+render(RawTemplate, Params, RawPartials) ->
+    AST = compile(RawTemplate),
+    Context = #context{ params = to_map(Params),
+                        partials = prepare_partials(RawPartials) },
+    do_render(AST, Context, "").
+
+do_render([], _, Acc) -> ?FLAT(?REV(Acc));
+do_render([{comment, _, _} | Tail], Context, Acc) ->
+    do_render(Tail, Context, Acc);
+do_render([{delimiter, _, NewDelimiter, _} | Tail], Context, Acc) ->
+    do_render(Tail, Context#context{ delimiter = NewDelimiter }, Acc);
+do_render([{partial, Key, _, Padding} | Tail], Context, Acc) ->
+    RenderedPartial = render_partial(Key, Context, Padding),
+    do_render(Tail, Context, [RenderedPartial | Acc]);
+do_render([{dynamic, Key, _, Padding} | Tail], Context, Acc) ->
+    case val(Key, Context) of
+        "" -> do_render(Tail, Context, Acc);
+        RawPartialKey ->
+            PartialKey = to_atom(RawPartialKey),
+            RenderedPartial = render_partial(PartialKey, Context, Padding),
+            do_render(Tail, Context, [RenderedPartial | Acc])
+    end;
+do_render([{new_line, NewLine} | Tail], Context, Acc) ->
+    do_render(Tail, Context, [NewLine | Acc]);
+do_render([{SectionType, Key, SectionAST, _} | Tail], Context, Acc)
+  when SectionType =:= section;
+       SectionType =:= inverted ->
+    Value = val(Key, Context),
+    IsInverted = (SectionType =:= inverted),
+    Rendered = case is_empty_or_false(Value) of
+                   IsInverted -> render_section(SectionAST, Context, Value);
+                   _ -> []
+               end,
+    do_render(Tail, Context, Rendered ++ Acc);
+do_render([{SubstitutionType, Key, _} | Tail], Context, Acc)
+  when SubstitutionType =:= variable;
+       SubstitutionType =:= no_escape ->
+    Value = val(Key, Context),
+    case is_empty_or_false(Value) of
+        true -> do_render(Tail, Context, Acc);
+        _ ->
+            Escape = SubstitutionType =:= variable,
+            Value2 = substitute(Value, Context, Escape),
+            do_render(Tail, Context, [Value2 | Acc])
+    end;
+do_render([{ignore, _} | Tail], Context, Acc) ->
+    do_render(Tail, Context, Acc);
+do_render([List | Tail], Context, Acc) when is_list(List) ->
+    do_render(Tail, Context, [List | Acc]).
+
+substitute(Lambda, Context, Escape) when is_function(Lambda, 0) ->
+    Ast = compile(to_str(Lambda())),
+    Value = do_render(Ast, Context, []),
+    escape(Value, Escape);
+substitute(RawValue, _, Escape) ->
+    Value = to_str(RawValue),
+    escape(Value, Escape).
+
+render_partial(PartialKey, Context, Padding) ->
+    case get_partial(PartialKey, Context) of
+        not_found -> "";
+        Partial ->
+            AST = compile(Partial),
+            do_render(add_padding(AST, Padding), Context, [])
+    end.
+
+add_padding(AST, "") -> AST;
+add_padding(AST, Pad) ->
+    add_padding([Pad | AST], Pad, []).
+
+add_padding([], _, Acc) -> ?REV(Acc);
+add_padding([{new_line, _} = NewLine], Pad, Acc) ->
+    add_padding([], Pad, [NewLine | Acc]);
+add_padding([{new_line, _} = NewLine | Tail], Pad, Acc) ->
+    add_padding(Tail, Pad, [Pad, NewLine | Acc]);
+add_padding([Element | Tail], Pad, Acc) ->
+    add_padding(Tail, Pad, [Element | Acc]).
+
+
+render_section(AST, Context, Lambda)
+  when is_function(Lambda, 1);
+       is_function(Lambda, 2) ->
+    Template = mustache_ast:ast_to_template(AST),
+    {StartTag, EndTag} = Context#context.delimiter,
+    Options = #{ start_tag => StartTag, end_tag => EndTag },
+    NewTemplate = get_lambda_template(Context, Template, Lambda, Options),
+    ?REV(do_render(compile(NewTemplate, Options), Context, []));
+render_section(AST, Context, "") ->
+    NewContext = update_params_context(Context, ""),
+    ?REV(do_render(AST, NewContext, []));
+render_section(AST, Context, Value)
+  when is_list(Value) ->
+    Fun = fun (Item) ->
+                  NewContext = update_params_context(Context, Item),
+                  do_render(AST, NewContext, [])
+          end,
+    ?REV(lists:map(Fun, Value));
+render_section(AST, Context, Value) ->
+    NewContext = update_params_context(Context, Value),
+    ?REV(do_render(AST, NewContext, [])).
+
+get_lambda_template(_, Template, Lambda, _)
+  when is_function(Lambda, 1) ->
+    Lambda(Template);
+get_lambda_template(Context, Template, Lambda, Options)
+  when is_function(Lambda, 2) ->
+    NewContext = update_params_context(Context, Lambda),
+    Renderer = fun (NewTemplate) ->
+                       NewAST = compile(NewTemplate, Options),
+                       do_render(NewAST, NewContext, [])
+               end,
+    Lambda(Template, Renderer).
+
+
+compile(Content) ->
+    Options = #{ start_tag => "{{", end_tag => "}}" },
+    compile(Content, Options).
+
+compile(RawTemplate, Options) ->
+    Template = unicode:characters_to_list(RawTemplate),
+    Tokens = mustache_scan:tokens(Template, Options),
+    mustache_ast:build(Tokens).
+
+prepare_partials(RawPartials) ->
+    Fun = fun (RawKey, RawPartial, MapAcc) ->
+                  Key = to_atom(RawKey),
+                  MapAcc#{Key => unicode:characters_to_list(RawPartial)}
+          end,
+    maps:fold(Fun, #{}, RawPartials).
 
 is_proplist(List) when is_list(List) ->
     lists:all(fun ({_, _}) -> true; (_) -> false end, List);
-is_proplist(_) -> false.
+is_proplist(_) ->
+    false.
 
+to_atom(Atom) when is_atom(Atom) -> Atom;
+to_atom(List) when is_list(List) -> list_to_atom(List);
+to_atom(Binary) when is_binary(Binary) -> to_atom(binary_to_list(Binary)).

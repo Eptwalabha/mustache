@@ -3,6 +3,9 @@
 -include_lib("eunit/include/eunit.hrl").
 
 
+render_empty_template_test() ->
+    ?assertEqual("", mustache:render("")).
+
 render_test() ->
     ?assertEqual("", mustache:render("{{mustache}}")).
 
@@ -30,18 +33,6 @@ render_all_variables_test() ->
     Map = #{ var1 => "toto", var2 => "tata"},
     ?assertEqual("toto tata  toto", mustache:render(Template, Map)).
 
-render_missing_end_delimiter_test() ->
-    Template = "Hello {{name",
-    Map = #{ name => "Tom" },
-    ?assertEqual("Hello {{name", mustache:render(Template, Map)).
-
-render_broken_tag_test() ->
-    Template = "I am become {{name}, the {{job}}",
-    Map = #{ name => "Death",
-             job => "destroyer of worlds" },
-    ?assertEqual("I am become {{name}, the destroyer of worlds",
-                 mustache:render(Template, Map)).
-
 render_type_test() ->
     Template = "{{atom}}, {{int}}, {{float}}, {{string}}, {{binary}}, {{bool}}",
     Map = #{ atom => atom,
@@ -49,8 +40,8 @@ render_type_test() ->
              float => 10.01,
              string => "strïng",
              binary => <<"bïnary"/utf8>>,
-             bool => false },
-    ?assertEqual("atom, 10, 10.01, strïng, bïnary, false",
+             bool => true },
+    ?assertEqual("atom, 10, 10.01, strïng, bïnary, true",
                  mustache:render(Template, Map)).
 
 render_unicode_test() ->
@@ -69,18 +60,6 @@ render_escape_html_test() ->
                  mustache:render(Template, #{ injection => "&\"'" })),
     ?assertEqual("",
                  mustache:render(Template, #{ injection => null })).
-
-render_missing_end_delimiter_escape_test() ->
-    Template = "Hello {{{name",
-    ?assertEqual("Hello {{{name",
-                 mustache:render(Template, #{ name => "Tom" })).
-
-render_broken_escape_tag_test() ->
-    Template = "I am become {{{name}}, the {{{function}}}",
-    Map = #{ name => "Beethoven",
-             function => "destroyer of plants" },
-    ?assertEqual("I am become {{{name}}, the destroyer of plants",
-                 mustache:render(Template, Map)).
 
 render_does_not_escape_html_test() ->
     Template = "{{{html}}}",
@@ -109,7 +88,9 @@ render_do_not_render_sections_test() ->
     ?assertEqual("", mustache:render(Template)),
     ?assertEqual("", mustache:render(Template, #{ section => false })),
     ?assertEqual("", mustache:render(Template, #{ section => null })),
-    ?assertEqual("", mustache:render(Template, #{ section => [] })).
+    ?assertEqual("", mustache:render(Template, #{ section => [] })),
+    ?assertEqual("", mustache:render(Template, #{ section => <<"">> })),
+    ?assertEqual("", mustache:render(Template, #{ section => 0 })).
 
 render_section_if_true_test() ->
     Template = "{{#section}}hello {{name}}{{/section}}",
@@ -194,12 +175,27 @@ render_section_with_lambda_test() ->
     ?assertEqual("ラムダ: <b>hellö wōrld</b>",
                  mustache:render(Template, Map)).
 
+render_section_substitution_with_lambda_test() ->
+    Lambda = fun () -> "<Hellö>" end,
+    Template = "ラムダ: {{lambda}} {{&lambda}}",
+    Map = #{ lambda => Lambda },
+    ?assertEqual("ラムダ: &lt;Hellö&gt; <Hellö>",
+                 mustache:render(Template, Map)).
+
+render_section_substitution_with_lambda_are_compiled_test() ->
+    Lambda = fun () -> "Hëllo <{{who}}>" end,
+    Template = "{{&lambda}}",
+    Map = #{ lambda => Lambda,
+             who => <<"wōrld"/utf8>> },
+    ?assertEqual("Hëllo <wōrld>",
+                 mustache:render(Template, Map)).
+
 render_section_with_no_endtag_test() ->
     Template = "Dwarves: {{#dwarves}}{{.}},",
     Map = #{ dwarves => ["Doc", "Happy", "Bashful", "Grumpy",
                          "Sleepy", "Sneezy", "Dopey"] },
-    Expected = "Dwarves: Doc,Happy,Bashful,Grumpy,Sleepy,Sneezy,Dopey,",
-    ?assertEqual(Expected, mustache:render(Template, Map)).
+    Expected = {missing_end_section, "dwarves"},
+    ?assertError(Expected, mustache:render(Template, Map)).
 
 render_ignore_comments_test() ->
     Template = "Hello {{! ignore me}}world{{!ignore}}",
@@ -216,22 +212,24 @@ render_inverted_section_test() ->
 
 render_partial_section_test() ->
     Template = "{{#names}}{{>test}}{{/names}}",
-    Map = #{ test => "my name is {{name}}\n",
-             names => [#{ name => "Huey" },
+    Partials = #{ "test" => "my name is {{name}}\n" },
+    Map = #{ names => [#{ name => "Huey" },
                        #{ name => "Dewey" },
                        #{ name => "Louie" }] },
     ?assertEqual("my name is Huey\n"
                  "my name is Dewey\n"
                  "my name is Louie\n",
-                 mustache:render(Template, Map)).
+                 mustache:render(Template, Map, Partials)).
 
 render_partial_section_not_defined_test() ->
     Template = "{{>does-not-exists}}",
     ?assertEqual("", mustache:render(Template)).
 
+-ifdef(capturedOutput).
 main_only_template_test() ->
     mustache:main(["Hello {{name}}!"]),
     ?assertEqual("Hello !\n", ?capturedOutput).
+-endif.
 
 render_multiple_sections_test() ->
     Template = "{{#items}}- {{name}}\n{{/items}}"
@@ -245,13 +243,16 @@ render_multiple_sections_test() ->
                  mustache:render(Template, Map)).
 
 render_allows_proplists_test() ->
-    Template = "Hello {{#friend}}{{name}} ({{surname}}){{/friend}}"
+    Template = "\n"
+               "Hello {{#friend}}{{name}} ({{surname}}){{/friend}}"
                "{{#elements}} {{.}}{{/elements}} "
-               "{{something}}",
+               "{{something}} - "
+               "{{#map.proplist}}{{.}}, {{/map.proplist}}",
     Proplist = [{friend, [{name, "John"}, {surname, "Joe"}]},
                 {"elements", ["Peter", "Loïs"]},
-                {something, else}],
-    ?assertEqual("Hello John (Joe) Peter Loïs else",
+                {something, else},
+                {map, #{ proplist => ["a", <<"b">>] }}],
+    ?assertEqual("\nHello John (Joe) Peter Loïs else - a, b, ",
                  mustache:render(Template, Proplist)).
 
 render_allows_mix_chardata_template_test() ->
@@ -271,3 +272,6 @@ render_dot_notation_not_found_test() ->
     Map = #{ a => #{ b => 123 } },
     ?assertEqual("", mustache:render(Template, Map)).
 
+render_dot_for_single_param_test() ->
+    Template = "foo {{.}}",
+    ?assertEqual("foo bar", mustache:render(Template, "bar")).
