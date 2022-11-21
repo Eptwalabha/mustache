@@ -272,3 +272,6 @@ render_dot_notation_not_found_test() ->
     Map = #{ a => #{ b => 123 } },
     ?assertEqual("", mustache:render(Template, Map)).
 
+render_dot_for_single_param_test() ->
+    Template = "foo {{.}}",
+    ?assertEqual("foo bar", mustache:render(Template, "bar")).
