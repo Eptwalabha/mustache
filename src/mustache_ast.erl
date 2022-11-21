@@ -12,8 +12,6 @@ build(Tokens) ->
 ast([], null, Acc) -> {?REV(Acc), "", []};
 ast([], SectionName, _) ->
     error({missing_end_section, SectionName});
-ast([{ignore, _} | Tail], SectionName, Acc) ->
-    ast(Tail, SectionName, Acc);
 ast([{end_section, SectionName, I} | Tail], SectionName, Acc) ->
     {?REV(Acc), I, Tail};
 ast([{Section, SubSectionName, TagContent} | Tail], SectionName, Acc)
@@ -43,22 +41,16 @@ ast_to_template([{Section, _, SectionInnerAST, {Open, Close}} | Tail], Acc)
 ast_to_template([{Section, _, TagContent, Padding} | Tail], Acc)
   when Section =:= partial;
        Section =:= dynamic ->
-    ast_to_template(Tail, [?REV(Padding ++ TagContent) | Acc]);
+    ast_to_template(Tail, [?REV(Padding) ++ TagContent | Acc]);
 ast_to_template([{_, _, Txt} | Tail], Acc) ->
     ast_to_template(Tail, [Txt | Acc]);
 ast_to_template([{new_line, NewLine} | Tail], Acc) ->
     ast_to_template(Tail, [NewLine | Acc]);
+ast_to_template([{blank, Txt} | Tail], Acc) ->
+    ast_to_template(Tail, [?REV(Txt) | Acc]);
 ast_to_template([{ignore, Line} | Tail], Acc) ->
     Ignore = ast_to_template(Line, []),
-    ast_to_template(Tail, [?REV(Ignore) | Acc]);
-ast_to_template([List | Tail], Acc) when is_list(List) ->
-    case is_string(List) of
-        true -> ast_to_template(Tail, [List | Acc]);
-        _ ->
-            Txt = lists:map(fun ast_to_template/1, List),
-            ast_to_template(Tail, [Txt | Acc])
-    end.
-
-is_string(List) when is_list(List) ->
-    lists:all(fun (X) -> is_integer(X) end, ?FLAT(List)).
+    ast_to_template(Tail, [Ignore | Acc]);
+ast_to_template([String | Tail], Acc) when is_list(String) ->
+    ast_to_template(Tail, [String | Acc]).
 

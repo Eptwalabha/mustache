@@ -5,6 +5,9 @@
 ast_to_template_full_test() ->
     Template = <<"toto {{! comment }}  \n"
                  "  {{#section  }}  {{! comment }}\n"
+                 "\t  {{>* dynamic }} {{! comment }}\n"
+                 "single line\n"
+                 "{{!comment1}} {{!comment2}} {{!comment3}}\n"
                  "test öne two {{value}}\n"
                  "{{/section}}"/utf8>>,
     TokenizerOptions = #{ start_tag => "{{", end_tag => "}}" },
