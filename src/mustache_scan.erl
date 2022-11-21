@@ -48,9 +48,8 @@ tokens(Template, #{ start_tag := StartTag } = Options, Acc) ->
 parse_tag(Template, #{ start_tag := Start, end_tag := End }) ->
     case fetch_tag_content(Template, End, "") of
         {[$= | _] = TagContent, Tail} ->
-            {NewStartTag, NewEndTag} = parse_delimiter(TagContent),
-            FullTagContent = ?FLAT([Start, TagContent, End]),
-            {{delimiter, {NewStartTag, NewEndTag}, FullTagContent}, Tail};
+            Delimiters = {_NewStart, _NewEnd} = parse_delimiter(TagContent),
+            {{delimiter, Delimiters, ?FLAT([Start, TagContent, End])}, Tail};
         {TagContent, Tail} ->
             FullTagContent = Start ++ TagContent ++ End,
             {TagType, TagName} = parse_tag_name(TagContent),
@@ -150,11 +149,10 @@ do_clean_line(Line) ->
                   when Type =:= section;
                        Type =:= inverted;
                        Type =:= end_section ->
-                    FullContent = ?FLAT([Leading, Content, Trailing]),
-                    [{Type, Name, FullContent}];
+                    [{Type, Name, ?FLAT([Leading, Content, Trailing])}];
                 [{delimiter, OldDelimiters, NewDelimiters, Content}] ->
-                    FullContent = ?FLAT([Leading, Content, Trailing]),
-                    [{delimiter, OldDelimiters, NewDelimiters, FullContent}];
+                    [{delimiter, OldDelimiters, NewDelimiters,
+                      ?FLAT([Leading, Content, Trailing])}];
                 _ -> Line
             end
     end.
