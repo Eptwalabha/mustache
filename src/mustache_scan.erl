@@ -2,28 +2,32 @@
 
 -export([tokens/2]).
 
--include("mustache.hrl").
+-include_lib("../include/mustache.hrl").
 
 tokens(RawTemplate, Options) ->
     Template = unicode:characters_to_list(RawTemplate),
-    tokens(Template, Options, []).
+    Tokens = tokens(Template, Options, []),
+    clean(Tokens, {[], []}).
 
 tokens([], _, [{string, String} | Acc]) ->
     ?REV([{string, ?REV(String)} | Acc]);
 tokens([], _, Acc) -> ?REV(Acc);
+tokens([$\r, $\n | Tail], Options, Acc) ->
+    Acc2 = push_acc({new_line, "\r\n"}, Acc),
+    tokens(Tail, Options, Acc2);
 tokens([$\n | Tail], Options, Acc) ->
-    Acc2 = push_acc(new_line, Acc),
+    Acc2 = push_acc({new_line, "\n"}, Acc),
     tokens(Tail, Options, Acc2);
 tokens([${, ${, ${ | Tail], #{ start_tag := "{{" } = Options, Acc) ->
     Options2 = Options#{ start_tag => "{{{", end_tag => "}}}" },
-    {variable, TagName, TagContent, Tail2} = parse_tag(Tail, Options2),
+    {{variable, TagName, TagContent}, Tail2} = parse_tag(Tail, Options2),
     Acc2 = push_acc({no_escape, TagName, TagContent}, Acc),
     tokens(Tail2, Options, Acc2);
 tokens(Template, #{ start_tag := StartTag } = Options, Acc) ->
     case start_with(Template, StartTag) of
         {true, TagTail} ->
             case parse_tag(TagTail, Options) of
-                {delimiter, {NewStartTag, NewEndTag}, TagContent, Tail2} ->
+                {{delimiter, {NewStartTag, NewEndTag}, TagContent}, Tail2} ->
                     #{ start_tag := StartTag, end_tag := EndTag } = Options,
                     TagInfos = {delimiter, {StartTag, EndTag},
                                 {NewStartTag, NewEndTag}, TagContent},
@@ -31,8 +35,8 @@ tokens(Template, #{ start_tag := StartTag } = Options, Acc) ->
                     Options2 = Options#{ start_tag => NewStartTag,
                                          end_tag => NewEndTag },
                     tokens(Tail2, Options2, Acc2);
-                {TagType, TagName, TagContent, Tail2} ->
-                    Acc2 = push_acc({TagType, TagName, TagContent}, Acc),
+                {Tag, Tail2} ->
+                    Acc2 = push_acc(Tag, Acc),
                     tokens(Tail2, Options, Acc2)
             end;
         _ ->
@@ -46,16 +50,19 @@ parse_tag(Template, #{ start_tag := Start, end_tag := End }) ->
         {[$= | _] = TagContent, Tail} ->
             {NewStartTag, NewEndTag} = parse_delimiter(TagContent),
             FullTagContent = ?FLAT([Start, TagContent, End]),
-            {delimiter, {NewStartTag, NewEndTag}, FullTagContent, Tail};
+            {{delimiter, {NewStartTag, NewEndTag}, FullTagContent}, Tail};
         {TagContent, Tail} ->
             FullTagContent = Start ++ TagContent ++ End,
-            case parse_tag_name(TagContent) of
-                {TagType, TagName} ->
-                    {TagType, TagName, FullTagContent, Tail};
-                TagName ->
-                    {variable, TagName, FullTagContent, Tail}
-            end
+            {TagType, TagName} = parse_tag_name(TagContent),
+            {build_tag(TagType, TagName, FullTagContent), Tail}
     end.
+
+build_tag(TypeSection, TagName, TagContent)
+  when TypeSection =:= partial;
+       TypeSection =:= dynamic ->
+    {TypeSection, TagName, TagContent, ""};
+build_tag(TypeSection, TagName, TagContent) ->
+    {TypeSection, TagName, TagContent}.
 
 parse_delimiter([$= | TagContent]) ->
     case ?REV(TagContent) of
@@ -99,5 +106,92 @@ parse_tag_name([$> | Tag]) ->
         TagName -> {partial, TagName}
     end;
 parse_tag_name([$/ | Tag]) -> {end_section, string:trim(Tag)};
-parse_tag_name(Tag) -> string:trim(Tag).
+parse_tag_name(Tag) -> {variable, string:trim(Tag)}.
 
+
+clean([], {LineAcc, Acc}) ->
+    Line = clean_line(?REV(LineAcc)),
+    ?FLAT(?REV([Line | Acc]));
+clean([{new_line, _} = NewLine | Tail], {LineAcc, Acc}) ->
+    Line = clean_line(?REV([NewLine | LineAcc])),
+    clean(Tail, {[], [Line | Acc]});
+clean([Item | Tail], {LineAcc, Acc}) ->
+    clean(Tail, {[Item | LineAcc], Acc}).
+
+clean_line(Line) ->
+    case has_only_comments(Line, 0) of
+        true -> {ignore, Line};
+        _ -> do_clean_line(Line)
+    end.
+
+has_only_comments([], Nbr) -> Nbr >= 1;
+has_only_comments([{blank, _} | Tail], Nbr) ->
+    has_only_comments(Tail, Nbr);
+has_only_comments([{comment, _, _} | Tail], Nbr) ->
+    has_only_comments(Tail, Nbr + 1);
+has_only_comments(_, _) -> false.
+
+do_clean_line([]) -> [];
+do_clean_line([{new_line, _} = NewLine]) -> [NewLine];
+do_clean_line(Line) ->
+    case has_section_tag(Line) of
+        false -> Line;
+        _ ->
+            {LeadingBlanks, RealContent, TrailingBlanks} = break_line(Line),
+            Leading = blank_to_str(LeadingBlanks, ""),
+            Trailing = blank_to_str(TrailingBlanks, ""),
+            case RealContent of
+                [] -> {ignore, Line};
+                [{Type, Name, Content, _}]
+                  when Type =:= partial;
+                       Type =:= dynamic ->
+                    [{Type, Name, ?FLAT([Content, Trailing]), Leading}];
+                [{Type, Name, Content}]
+                  when Type =:= section;
+                       Type =:= inverted;
+                       Type =:= end_section ->
+                    FullContent = ?FLAT([Leading, Content, Trailing]),
+                    [{Type, Name, FullContent}];
+                [{delimiter, OldDelimiters, NewDelimiters, Content}] ->
+                    FullContent = ?FLAT([Leading, Content, Trailing]),
+                    [{delimiter, OldDelimiters, NewDelimiters, FullContent}];
+                _ -> Line
+            end
+    end.
+
+blank_to_str([], Acc) -> ?FLAT(?REV(Acc));
+blank_to_str([{comment, _, Content} | Tail], Acc) ->
+    blank_to_str(Tail, [Content | Acc]);
+blank_to_str([{_, Content} | Tail], Acc) ->
+    blank_to_str(Tail, [?REV(Content) | Acc]).
+
+has_section_tag([]) -> false;
+has_section_tag([{Type, _, _} | _])
+  when Type =:= section;
+       Type =:= inverted;
+       Type =:= end_section;
+       Type =:= comment ->
+    true;
+has_section_tag([{Type, _, _, _} | _])
+  when Type =:= partial;
+       Type =:= dynamic;
+       Type =:= delimiter ->
+    true;
+has_section_tag([_ | Tail]) ->
+    has_section_tag(Tail).
+
+break_line(Line) ->
+    {LeadingBlanks, Tail} = split_blank(Line, []),
+    {TrailingBlanks, Tail2} = split_blank(?REV(Tail), []),
+    {LeadingBlanks, ?REV(Tail2), ?REV(TrailingBlanks)}.
+
+split_blank([], Acc) ->
+    {?REV(Acc), []};
+split_blank([{blank, _} = Blank | Tail], Acc) ->
+    split_blank(Tail, [Blank | Acc]);
+split_blank([{comment, _, _} = Comment | Tail], Acc) ->
+    split_blank(Tail, [Comment | Acc]);
+split_blank([{new_line, _} = NewLine | Tail], Acc) ->
+    split_blank(Tail, [NewLine | Acc]);
+split_blank(Tail, Acc) ->
+    {?REV(Acc), Tail}.

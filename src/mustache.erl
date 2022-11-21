@@ -4,7 +4,7 @@
 -export([compile/1]).
 -export([main/1]).
 
--include("mustache.hrl").
+-include_lib("../include/mustache.hrl").
 
 -record(context, { params = #{},
                    partials = #{},
@@ -118,21 +118,23 @@ render(RawTemplate, Params, RawPartials) ->
     do_render(AST, Context, "").
 
 do_render([], _, Acc) -> ?FLAT(?REV(Acc));
+do_render([{comment, _, _} | Tail], Context, Acc) ->
+    do_render(Tail, Context, Acc);
 do_render([{delimiter, _, NewDelimiter, _} | Tail], Context, Acc) ->
     do_render(Tail, Context#context{ delimiter = NewDelimiter }, Acc);
-do_render([{partial, Key, _} | Tail], Context, Acc) ->
-    RenderedPartial = render_partial(Key, Context),
+do_render([{partial, Key, _, Padding} | Tail], Context, Acc) ->
+    RenderedPartial = render_partial(Key, Context, Padding),
     do_render(Tail, Context, [RenderedPartial | Acc]);
-do_render([{dynamic, Key, _} | Tail], Context, Acc) ->
+do_render([{dynamic, Key, _, Padding} | Tail], Context, Acc) ->
     case val(Key, Context) of
         "" -> do_render(Tail, Context, Acc);
         RawPartialKey ->
             PartialKey = to_atom(RawPartialKey),
-            RenderedPartial = render_partial(PartialKey, Context),
+            RenderedPartial = render_partial(PartialKey, Context, Padding),
             do_render(Tail, Context, [RenderedPartial | Acc])
     end;
-do_render([new_line | Tail], Context, Acc) ->
-    do_render(Tail, Context, [$\n | Acc]);
+do_render([{new_line, NewLine} | Tail], Context, Acc) ->
+    do_render(Tail, Context, [NewLine | Acc]);
 do_render([{SectionType, Key, SectionAST, _} | Tail], Context, Acc)
   when SectionType =:= section;
        SectionType =:= inverted ->
@@ -154,6 +156,8 @@ do_render([{SubstitutionType, Key, _} | Tail], Context, Acc)
             Value2 = substitute(Value, Context, Escape),
             do_render(Tail, Context, [Value2 | Acc])
     end;
+do_render([{ignore, _} | Tail], Context, Acc) ->
+    do_render(Tail, Context, Acc);
 do_render([List | Tail], Context, Acc) when is_list(List) ->
     do_render(Tail, Context, [List | Acc]).
 
@@ -165,13 +169,26 @@ substitute(RawValue, _, Escape) ->
     Value = to_str(RawValue),
     escape(Value, Escape).
 
-render_partial(PartialKey, Context) ->
+render_partial(PartialKey, Context, Padding) ->
     case get_partial(PartialKey, Context) of
         not_found -> "";
         Partial ->
             AST = compile(Partial),
-            do_render(AST, Context, [])
+            do_render(add_padding(AST, Padding), Context, [])
     end.
+
+add_padding(AST, "") -> AST;
+add_padding(AST, Pad) ->
+    add_padding([Pad | AST], Pad, []).
+
+add_padding([], _, Acc) -> ?REV(Acc);
+add_padding([{new_line, _} = NewLine], Pad, Acc) ->
+    add_padding([], Pad, [NewLine | Acc]);
+add_padding([{new_line, _} = NewLine | Tail], Pad, Acc) ->
+    add_padding(Tail, Pad, [Pad, NewLine | Acc]);
+add_padding([Element | Tail], Pad, Acc) ->
+    add_padding(Tail, Pad, [Element | Acc]).
+
 
 render_section(AST, Context, Lambda)
   when is_function(Lambda, 1);

@@ -88,7 +88,9 @@ render_do_not_render_sections_test() ->
     ?assertEqual("", mustache:render(Template)),
     ?assertEqual("", mustache:render(Template, #{ section => false })),
     ?assertEqual("", mustache:render(Template, #{ section => null })),
-    ?assertEqual("", mustache:render(Template, #{ section => [] })).
+    ?assertEqual("", mustache:render(Template, #{ section => [] })),
+    ?assertEqual("", mustache:render(Template, #{ section => <<"">> })),
+    ?assertEqual("", mustache:render(Template, #{ section => 0 })).
 
 render_section_if_true_test() ->
     Template = "{{#section}}hello {{name}}{{/section}}",
