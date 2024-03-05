@@ -162,8 +162,8 @@ do_render([List | Tail], Context, Acc) when is_list(List) ->
     do_render(Tail, Context, [List | Acc]).
 
 substitute(Lambda, Context, Escape) when is_function(Lambda, 0) ->
-    Ast = compile(to_str(Lambda())),
-    Value = do_render(Ast, Context, []),
+    AST = compile(to_str(Lambda())),
+    Value = do_render(AST, Context, []),
     escape(Value, Escape);
 substitute(RawValue, _, Escape) ->
     Value = to_str(RawValue),
