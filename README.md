@@ -1,12 +1,13 @@
 # mustache
 
-[![Erlang CI](https://github.com/Eptwalabha/mustache/actions/workflows/erlang.yml/badge.svg)](https://github.com/Eptwalabha/mustache/actions/workflows/erlang.yml)  
+[![Erlang CI](https://github.com/Eptwalabha/mustache/actions/workflows/ci.yml/badge.svg)](https://github.com/Eptwalabha/mustache/actions/workflows/ci.yml)  
 Current version: `v0.2.0`
 
 A library to render [Mustach](https://mustache.github.io/) templates.  
 It complies with the [Mustache's manual](https://mustache.github.io/mustache.5.html) and [specs](#specs).
 
-> :warning: While all major features are present, this library is still under development. The following have yet to be added:
+> [!WARNING]
+> While all major features are present, this library is still under development. The following have yet to be added:
 > - fetch template & partials from file
 > - inheritancy
 
