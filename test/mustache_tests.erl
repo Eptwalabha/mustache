@@ -250,7 +250,7 @@ render_allows_proplists_test() ->
                "{{#map.proplist}}{{.}}, {{/map.proplist}}",
     Proplist = [{friend, [{name, "John"}, {surname, "Joe"}]},
                 {"elements", ["Peter", "Loïs"]},
-                {something, else},
+                {something, 'else'},
                 {map, #{ proplist => ["a", <<"b">>] }}],
     ?assertEqual("\nHello John (Joe) Peter Loïs else - a, b, ",
                  mustache:render(Template, Proplist)).
