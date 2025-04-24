@@ -1,4 +1,4 @@
--module(mustache_scan_test).
+-module(mustache_scan_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 
