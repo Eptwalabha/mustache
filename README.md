@@ -3,7 +3,7 @@
 [![Erlang CI](https://github.com/Eptwalabha/mustache/actions/workflows/ci.yml/badge.svg)](https://github.com/Eptwalabha/mustache/actions/workflows/ci.yml)  
 Current version: `v0.2.0`
 
-A library to render [Mustach](https://mustache.github.io/) templates.  
+A library to render [Mustache](https://mustache.github.io/) templates.  
 It complies with the [Mustache's manual](https://mustache.github.io/mustache.5.html) and [specs](#specs).
 
 > [!WARNING]
